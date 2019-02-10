@@ -9,7 +9,12 @@ class Register(
     case RegTypeEnums.general => 0
     case RegTypeEnums.pc => 0
     // what should this be?
-    case RegTypeEnums.flag => 0
+    case RegTypeEnums.flag => {
+      var N = false
+      var Z = false
+      var C = false
+      var V = false
+    }
   }
 
   // The below methods in case of flag?
