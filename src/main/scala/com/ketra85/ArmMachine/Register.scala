@@ -1,9 +1,7 @@
 package com.ketra85.ArmMachine
 import com.ketra85.ArmMachine.RegTypeEnums.RegType
 
-class Register(
-                val name: String,
-                val regType: RegType) {
+class Register(name: String, regType: RegType) {
 
   var value = regType match {
     case RegTypeEnums.general => 0
