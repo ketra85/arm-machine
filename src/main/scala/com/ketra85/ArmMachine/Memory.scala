@@ -4,6 +4,8 @@ package com.ketra85.ArmMachine
 case class Memory(memorySize: Int)
 
 object Memory {
+  private val DEFAULT_MEMORY_SIZE = 65536
+
   var memory = memorySize match {
     case x if x <= 0 => new Array[Int](DEFAULT_MEMORY_SIZE)
     case _ => new Array[Int](memorySize)

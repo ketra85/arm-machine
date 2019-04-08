@@ -9,7 +9,7 @@ case class ADC(val name: String,
 
   // rd = rn + shift
   def operation(rd: Register, rn: Register, shift: Int,
-                sBit: Boolean, regs: Register*) {
+                condition: Boolean, sBit: Boolean, regs: Register*) {
 //    rd = rn + shift
     rd.value = rn.value + shift
   }

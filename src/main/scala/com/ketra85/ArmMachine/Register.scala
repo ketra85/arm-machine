@@ -1,7 +1,7 @@
 package com.ketra85.ArmMachine
 import com.ketra85.ArmMachine.RegTypeEnums.RegType
 
-class Register(name: String, regType: RegType) {
+class Register(name: String, val regType: RegType) {
 
 //  var value = regType match {
 //    case RegTypeEnums.generalUnbanked || RegTypeEnums.generalBanked || RegTypeEnums.pc => 0
@@ -26,15 +26,5 @@ class Register(name: String, regType: RegType) {
 //    this.value = value
 //  }
 
-}
-
-object RegTypeEnums {
-  sealed trait RegType
-  case object generalUnbanked extends RegType
-  case object generalBanked extends RegType
-  case object pc extends RegType
-  case object flag extends RegType
-
-  val Conditionals = Seq(generalUnbanked, generalBanked, pc, flag)
 }
 

@@ -3,7 +3,6 @@ package com.ketra85.ArmMachine
 // Emulator class encapsulating emulator operations
 // Memory, Registers, etc
 class Emulator(memorySize: Int, numberOfRegisters: Int) {
-  private val DEFAULT_MEMORY_SIZE = 65536
   private val DEFAULT_NUMBER_OF_GENERAL_REGISTERS = 15
   private val DEFAULT_PC_REGISTERS = 1
   private val DEFAULT_FLAG_REGISTERS = 2
