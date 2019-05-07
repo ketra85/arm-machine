@@ -1,68 +1,60 @@
 package com.ketra85.ArmMachine
 
-import scala.language.experimental.macros
-import scala.reflect.macros.blackbox.Context
 
+import com.ketra85.ArmMachine.Flag.FlagSet
+import Globals._
 
 // Emulator class encapsulating emulator operations
 // Memory, Registers, etc
+
+//sealed trait Mode { def hexa: Int }
+//case object USR extends Mode { val hexa = 0x10}
+//case object FIQ extends Mode { val hexa = 0x11}
+//case object IRQ extends Mode { val hexa = 0x12}
+//case object SVC extends Mode { val hexa = 0x13}
+//case object ABT extends Mode { val hexa = 0x17}
+//case object UND extends Mode { val hexa = 0x1b}
+//case object SYS extends Mode { val hexa = 0x1f}
+object ProcessorMode extends Enumeration {
+  val USR = Value(0x10)
+  val FIQ = Value(0x11)
+  val IRQ = Value(0x12)
+  val SVC = Value(0x13)
+  val ABT = Value(0x17)
+  val UND = Value(0x1b)
+  val SYS = Value(0x1f)
+
+}
+
+
 class Emulator() {
 //  private val DEFAULT_NUMBER_OF_GENERAL_REGISTERS = 15
 //  private val DEFAULT_PC_REGISTERS = 1
 //  private val DEFAULT_FLAG_REGISTERS = 2
+  var prefetch: List[Int] = List.fill(2)(0)
+  var memory: MMU = MMU(this)
+  var nextPC: Int = 0x00000000
+  var armState: Boolean = true
+  var irq: Boolean = true
+  var currMode = ProcessorMode.SYS
 
+  var registers = List.fill[Int](31)(0)
 
-  // reg 13 -> Stack Pointer
-  // reg 14 -> Link Register
-  // reg 15 -> Program Counter
-  // BANKED AND UNBANKED REGS
-  val USR_MODE = 0x10
-  val FIQ_MODE = 0x11
-  val IRQ_MODE = 0x12
-  val SVC_MODE = 0x13
-  val ABT_MODE = 0x17
-  val UND_MODE = 0x1b
-  val SYS_MODE = 0x1f
+  var cpsr = Flag.FlagSet()
+  var spsr = Flag.FlagSet()
+  var spsrSVC = Flag.FlagSet()
+  var spsrABT = Flag.FlagSet()
+  var spsrUND = Flag.FlagSet()
+  var spsrIRQ = Flag.FlagSet()
+  var spsrFIQ = Flag.FlagSet()
 
-  var registers = Array.fill[Int](16)(0)
-  // what do?
-  var registersSYS = Array.fill[Int](16)(0)
-  var registersSVC = Array.fill[Int](15)(0)
-  var registersABT = Array.fill[Int](15)(0)
-  var registersUND = Array.fill[Int](15)(0)
-  var registersIRQ = Array.fill[Int](15)(0)
-  var registersIRQ = Array.fill[Int](15)(0)
-
-  var memory = Array.fill[Int](65536)(0)
-
-  //remember multiple SPSR
-  var cpsr = Map("n" -> 0, "z" -> 0, "c" -> 0, "v" -> 0, "q" -> 0,
-    "e" -> 0, "a" -> 0, "i" -> 0, "f" -> 0, "t" -> 0, "m" -> 0)
-  var spsrSVC = Map("n" -> 0, "z" -> 0, "c" -> 0, "v" -> 0, "q" -> 0,
-    "e" -> 0, "a" -> 0, "i" -> 0, "f" -> 0, "t" -> 0, "m" -> 0)
-  var spsrABT = Map("n" -> 0, "z" -> 0, "c" -> 0, "v" -> 0, "q" -> 0,
-    "e" -> 0, "a" -> 0, "i" -> 0, "f" -> 0, "t" -> 0, "m" -> 0)
-  var spsrUND = Map("n" -> 0, "z" -> 0, "c" -> 0, "v" -> 0, "q" -> 0,
-    "e" -> 0, "a" -> 0, "i" -> 0, "f" -> 0, "t" -> 0, "m" -> 0)
-  var spsrIRQ = Map("n" -> 0, "z" -> 0, "c" -> 0, "v" -> 0, "q" -> 0,
-    "e" -> 0, "a" -> 0, "i" -> 0, "f" -> 0, "t" -> 0, "m" -> 0)
-  var spsrFIQ = Map("n" -> 0, "z" -> 0, "c" -> 0, "v" -> 0, "q" -> 0,
-    "e" -> 0, "a" -> 0, "i" -> 0, "f" -> 0, "t" -> 0, "m" -> 0)
-
-  val ASR = 2
-  val LSL = 0
-  val LSR = 1
-  val ROR = 4
-  val RRX = 3
-
-  var shift_type = 0
-  var shift_amount = 0
-  var carry_out : Boolean = false
-  var overflow : Int = 0
-  var branch = 0
+  var N_FLAG = false
+  var C_FLAG = false
+  var Z_FLAG = false
+  var V_FLAG = false
 
   def getProgramCounter() : Int = {
-    registers(15) + 8
+    registers(15) + 4
   }
 
   def getRegister(index : Int) : Int = {
@@ -73,240 +65,147 @@ class Emulator() {
     }
   }
 
+  def updateCPSR(): Unit = {
+    if(N_FLAG) cpsr.|(FlagSet(Flag.N))
+    if(C_FLAG) cpsr.|(FlagSet(Flag.C))
+    if(Z_FLAG) cpsr.|(FlagSet(Flag.Z))
+    if(V_FLAG) cpsr.|(FlagSet(Flag.V))
+    if(!armState) cpsr.|(FlagSet(Flag.T))
+    if(!irq) cpsr.|(FlagSet(Flag.I))
+
+    cpsr.|(Flag(currMode))
+  }
+
+  def updateFlags(): Unit = {
+    N_FLAG = cpsr.isSet(Flag.N)
+    C_FLAG = cpsr.isSet(Flag.C)
+    Z_FLAG = cpsr.isSet(Flag.Z)
+    V_FLAG = cpsr.isSet(Flag.V)
+    armState = cpsr.isSet(Flag.T)
+    irq = cpsr.isSet(Flag.I)
+  }
+
   def setRegister(index: Int, value: Int): Unit = {
     registers(index) = value
   }
 
-  def getCPSR(): Map[String, Int] = {
-    cpsr
-  }
+  def switchMode(mode: ProcessorMode.Value, save: Boolean): Unit = {
+    //update flags
+    updateCPSR()
 
-  def setCPSR(value : Int, set_overflow: Boolean): Unit = {
-    cpsr("n") = value >>> 31
-    cpsr("z") = if (value == 0) 1 else 0
-    cpsr("c") = carry_out
-
-    if(set_overflow) {
-      cpsr("v") = overflow
-    }
-  }
-
-  def conditionals(instruction: Int): String = {
-    // retrieve conditional bits
-    val cond = 0
-    cond match {
-      case 0 => "eq"
-      case 1 => "ne"
-      case 2 => "cs"
-      case 3 => "cc"
-      case 4 => "mi"
-      case 8 => "hi"
-      case 9 => "ls"
-      case 0xA => "ge"
-      case 0xB => "lt"
-      case 0xC => "gt"
-      case 0xD => "le"
-      case _ => ""
-    }
-  }
-
-  def LSLImm(instruction: Int): Unit = {
-    val shift = (instruction >> 7) & 0x1f
-    var value = 0
-
-    if (shift == 0) {
-      value = registers(instruction & 0x0f)
-    } else {
-      val v = registers(instruction & 0x0f)
-      carry_out = (((v >> (32 - shift)) & 1) == 1)
-      value = v << shift
-    }
-  }
-
-  def LSLReg(instruction: Int): Unit = {
-    val shift = registers((instruction >> 8) & 15)
-    var rm = registers(instruction & 0x0f)
-    var value = 0
-
-    if((instruction & 0x0f) == 15) rm += 4
-
-    if(shift == 0) {
-      if(shift == 32) {
-        value = 0
-        carry_out = (rm & 1) == 1
-      } else if(shift < 32) {
-        val v = rm
-        carry_out = ((v >> (32 - shift)) & 1) == 1
-        value = v << shift
-      } else {
-        value = 0
-        carry_out = false
-      }
-    } else {
-      value = rm
-    }
-  }
-
-  def LSRImm(instruction: Int): Unit = {
-    val shift = (instruction >> 7) & 0x1f
-    var value = 0
-
-    if (shift == 0) {
-      val v = registers(instruction & 0x0f)
-      carry_out = ((v >> (shift - 1)) & 1) == 1
-      value = v >> shift
-    } else {
-      value = 0
-      carry_out = (registers(instruction & 0x0f) & 0x80000000) == 1
-    }
-  }
-
-  def LSRReg(instruction: Int): Unit = {
-    val shift = registers((instruction >> 8) & 15)
-    var rm = registers(instruction & 0x0f)
-    var value = 0
-
-    if((instruction & 0x0f) == 15) rm += 4
-
-    if(shift == 0) {
-      if(shift == 32) {
-        value = 0
-        carry_out = (rm & 0x80000000) == 1
-      } else if(shift < 32) {
-        val v = rm
-        carry_out = ((v >> (shift - 1)) & 1) == 1
-        value = v >> shift
-      } else {
-        value = 0
-        carry_out = false
-      }
-    } else {
-      value = rm
-    }
-  }
-
-  def ASRImm(instruction: Int): Unit = {
-    val shift = (instruction >> 7) & 0x1f
-    var value = 0
-
-    if (shift == 0) {
-      val v = registers(instruction & 0x0f)
-      carry_out = ((v >> (shift - 1)) & 1) == 1
-      value = v >> shift
-    } else {
-      if((registers(instruction & 0x0f) & 0x80000000) == 1) {
-        value = 0xFFFFFFFF
-        carry_out = true
-      } else {
-        value = 0
-        carry_out = false
-      }
-    }
-  }
-
-  def ASRReg(instruction: Int): Unit = {
-    val shift = registers((instruction >> 8) & 15)
-    var rm = registers(instruction & 0x0f)
-    var value = 0
-
-    if((instruction & 0x0f) == 15) rm += 4
-
-    if(shift < 32) {
-      if(shift == 0) {
-        val v = rm
-        carry_out = ((v >> (shift - 1)) & 1) == 1
-        value = v >> shift
-      } else {
-        value = rm
-      }
-    } else {
-      if((registers(instruction & 0x0f) & 0x80000000) == 1) {
-        value = 0xFFFFFFFF
-        carry_out = true
-      } else {
-        value = 0
-        carry_out = false
-      }
-    }
-  }
-
-  def RORImm(instruction: Int): Unit = {
-    val shift = (instruction >> 7) & 0x1f
-    var value = 0
-
-    if (shift == 0) {
-      val v = registers(instruction & 0x0f)
-      carry_out = ((v >> (shift - 1)) & 1) == 1
-      value = (v << (32 - shift)) | (v >> shift)
-    } else {
-      val v = registers(instruction & 0x0f)
-      carry_out = ((v & 1)) == 1
-      value = (v >> 1) | (cpsr("c") << 31)
-    }
-  }
-
-  def RORReg(instruction: Int): Unit = {
-    val shift = registers((instruction >> 8) & 15)
-    var rm = registers(instruction & 0x0f)
-    var value = 0
-
-    if((instruction & 0x0f) == 15) rm += 4
-
-    if((shift & 0x1f) == 1) {
-      val v = rm
-      carry_out = ((v >> (shift - 1)) & 1) == 1
-      value = (v << (32 -  shift)) | (v >> shift)
-    } else {
-      value = rm
-      if(shift == 0) carry_out = ((value & 0x80000000) == 1)
-
-    }
-  }
-
-  def ValueImm(instruction: Int): Unit = {
-    val shift = (instruction & 0xf00) >> 7
-    var value = 0
-
-    if (shift == 0) {
-      val v = instruction & 0xff
-      carry_out = ((v >> (shift - 1)) & 1) == 1
-      value = (v << (32 - shift)) | (v >> shift)
-    } else {
-      value = instruction & 0xff
-    }
-  }
-
-  object InstructionMacros {
-
-    def adcImm(instruction: Int): Unit = macro adcImmMacro
-    def adcReg(instruction: Int): Unit = macro adcRegMacro
-    def addImm(instruction: Int): Unit = macro addImmMacro
-    def addReg(instruction: Int): Unit = macro addRegMacro
-
-
-    def adcImmMacro(c: Context)(instruction: Int): Unit = {
-//      import c.universe._
-
-      val rn = (instruction >>> 16) & 0xf
-      val rd = (instruction >>> 12) & 0xf
-      val sBit = instruction & 0x00100000
-      val imm12 = instruction & 0xfff
-      val result = registers(rn) + imm12 + cpsr("c")
-
-      registers(rd) = result
-
+    currMode match {
+      case ProcessorMode.USR =>
+      case ProcessorMode.SYS => registers(9) = 0
+      case ProcessorMode.FIQ =>
+        // need register swap method
+        registers(R13_FIQ) = registers(13)
+        registers(R14_FIQ) = registers(14)
+        spsrFIQ = cpsr
+      case ProcessorMode.IRQ =>
+        registers(R13_IRQ) = registers(13)
+        registers(R14_IRQ) = registers(14)
+        spsrIRQ = cpsr
+      case ProcessorMode.SVC =>
+        registers(R13_SVC) = registers(13)
+        registers(R14_SVC) = registers(14)
+        spsrSVC = cpsr
+      case ProcessorMode.ABT =>
+        registers(R13_ABT) = registers(13)
+        registers(R14_ABT) = registers(14)
+        spsrABT = cpsr
+      case ProcessorMode.UND =>
+        registers(R13_UND) = registers(13)
+        registers(R14_UND) = registers(14)
+        spsrUND = cpsr
     }
 
-    def adcRegMacro(instruction: Int): Unit = {
-      val sBit = instruction & 0x00100000
-      val rn = (instruction >>> 16) & 0xf
-      val rd = (instruction >>> 12) & 0xf
-      val imm5 = (instruction >>> 7) & 0x1f
-      val shiftType = (instruction >>> 5) & 3
-      val rm = instruction & 0xf
-
-
+    mode match {
+      case ProcessorMode.USR =>
+      case ProcessorMode.SYS => registers(9) = 0
+      case ProcessorMode.FIQ =>
+        // need register swap method
+        registers(13) = registers(R13_FIQ)
+        registers(14) = registers(R14_FIQ)
+        if (save) spsr = cpsr else spsr = spsrFIQ;
+      case ProcessorMode.IRQ =>
+        registers(13) = registers(R13_IRQ)
+        registers(14) = registers(R14_IRQ)
+        if (save) spsr = cpsr else spsr = spsrIRQ;
+      case ProcessorMode.SVC =>
+        registers(13) = registers(R13_SVC)
+        registers(14) = registers(R14_SVC)
+        if (save) spsr = cpsr else spsr = spsrSVC;
+      case ProcessorMode.ABT =>
+        registers(13) = registers(R13_ABT)
+        registers(14) = registers(R14_ABT)
+        if (save) spsr = cpsr else spsr = spsrABT;
+      case ProcessorMode.UND =>
+        registers(13) = registers(R13_UND)
+        registers(14) = registers(R14_UND)
+        if (save) spsr = cpsr else spsr = spsrUND;
     }
+
+    currMode = mode
+    updateFlags()
+    updateCPSR()
   }
 
+  def undefinedException(): Unit = {
+    val pc = registers(15)
+    val savedState = armState
+    //switch mode
+    registers(14) = pc - (if(savedState) 4 else 2)
+    registers(15) = 0x04
+    armState = true
+    irq = false
+    nextPC = 0x04
+    armPrefetch()
+    registers(15) += 4
+  }
+
+  def softwareInterrupt(): Unit = {
+    val pc = registers(15)
+    val savedState = armState
+    //switch mode
+    switchMode(ProcessorMode.FIQ, true)
+    registers(14) = pc - (if(savedState) 4 else 2)
+    registers(15) = 0x08
+    armState = true
+    irq = false
+    nextPC = 0x08
+    armPrefetch()
+    registers(15) += 4
+  }
+
+  def interrupt(): Unit = {
+    val pc = registers(15)
+    val savedState = armState
+    // switch modes
+    switchMode(ProcessorMode.IRQ, true)
+    registers(14) = pc
+    if(!savedState) registers(14) += 2
+    registers(15) = 0x18
+    armState = true
+    irq = false
+    nextPC += 4
+    armPrefetch()
+  }
+
+  def armPrefetch(): Unit = {
+    prefetch(0) = memory.read32(nextPC)
+    prefetch(1) = memory.read32(nextPC + 4)
+  }
+
+  def armPrefetchNext(): Unit = {
+    prefetch(1) = memory.read32(nextPC + 4)
+  }
+
+  def thumbPreftech(): Unit = {
+    prefetch(0) = memory.read16(nextPC)
+    prefetch(1) = memory.read16(nextPC + 2)
+  }
+
+  def thumbPreftechNext(): Unit = {
+    prefetch(1) = memory.read16(nextPC + 2)
+  }
 }
