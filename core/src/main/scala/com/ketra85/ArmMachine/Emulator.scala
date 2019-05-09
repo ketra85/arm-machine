@@ -28,6 +28,8 @@ object ProcessorMode extends Enumeration {
 
 
 class Emulator() {
+
+
 //  private val DEFAULT_NUMBER_OF_GENERAL_REGISTERS = 15
 //  private val DEFAULT_PC_REGISTERS = 1
 //  private val DEFAULT_FLAG_REGISTERS = 2
@@ -52,6 +54,8 @@ class Emulator() {
   var C_FLAG = false
   var Z_FLAG = false
   var V_FLAG = false
+
+
 
   def getProgramCounter() : Int = {
     registers(15) + 4

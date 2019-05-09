@@ -20,5 +20,13 @@ libraryDependencies ++= Seq(
   "org.clapper" %% "classutil" % "1.4.0"
 )
 
+//run <<= run in Compile in core
+lazy val macros = (project in file("macros")).settings(
+  libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value
+)
+
+lazy val core = (project in file("core")) dependsOn macros
+
+
 enablePlugins(SbtTwirl)
 enablePlugins(ScalatraPlugin)

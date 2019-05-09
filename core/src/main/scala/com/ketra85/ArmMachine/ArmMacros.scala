@@ -7,9 +7,34 @@ import scala.reflect.macros.blackbox.Context
 
 class ArmMacros(em: Emulator, instruction: Int) {
 
-  var value: Int = 0
-  var rd = (instruction >> 12) & 0xf
-  var carry_out: Boolean = em.cpsr.isSet(Flag.C)
+  var value: Int
+  var rd: Int
+  var carry_out: Boolean
+
+  var offset: Int
+  var base: Int
+
+//  def aluInit(): Unit = macro aluInitMacro
+//
+//  def aluInitMacro(c: Context)(): c.Tree = {
+//    import c.universe._
+//
+//    q"""
+//       var value: Int = 0
+//       var rd = (instruction >> 12) & 0xf
+//       var carry_out: Boolean = em.cpsr.isSet(Flag.C)
+//     """
+//
+////    value = 0
+////    rd = (instruction >> 12) & 0xf
+////    carry_out = em.cpsr.isSet(Flag.C)
+//  }
+
+  def aluInit(): Unit = {
+    value = 0
+    rd = (instruction >> 12) & 0xf
+    carry_out = em.cpsr.isSet(Flag.C)
+  }
 
   def LSLImm(): Unit = {
     val shift = (instruction >> 7) & 0x1f
@@ -170,6 +195,11 @@ class ArmMacros(em: Emulator, instruction: Int) {
     }
   }
 
+//  def ROR_IMM_MSR(): Unit = {
+//    val v = instruction & 0xff
+//    value = ((v << (32 -shift)))
+//  }
+
   // Data processing ops except multiplication
   def and(): Unit = macro andMacro
   def eor(): Unit = macro eorMacro
@@ -218,8 +248,6 @@ class ArmMacros(em: Emulator, instruction: Int) {
   def strbt(): Unit = macro strbtMacro
   def strt(): Unit = macro strtMacro
 
-  def armExecute(): Int = macro armExecuteMacro
-
   // STM and LDM
 
   // Branching
@@ -229,126 +257,221 @@ class ArmMacros(em: Emulator, instruction: Int) {
   def mrc(): Unit = macro mrcMacro
   def swi(): Unit = macro swiMacro
 
-  def andMacro(c: Context)(): Unit = {
-    val result = em.registers((instruction >> 16) & 0xf) & value
-    em.registers(rd) = result
+  def andMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+        val result = $em.registers(($instruction >> 16) & 0xf) & $value
+        $em.registers($rd) = result
+       """)
   }
 
-  def eorMacro(c: Context)(): Unit = {
-    val result = em.registers((instruction >> 16) & 0xf) ^ value
-    em.registers(rd) = result
-  }
-
-  def subMacro(): Unit = {
-    val rn = em.registers((instruction >> 16) & 0xf)
-    val imm = value
-    val result = rn - imm
-    em.registers(rd) = result
-  }
-
-  def rsbMacro(): Unit = {
-    val rn = em.registers((instruction >> 16) & 0xf)
-    val imm = value
-    val result = imm - rn
-    em.registers(rd) = result
-  }
-
-  def addMacro(c: Context)(): Unit = {
-    val rn = em.registers((instruction >> 16) & 0xf)
-    val imm = value
-    val result = rn + imm
-    em.registers(rd) = result
-  }
-
-  def adcMacro(c: Context)(): Unit = {
-    //      import c.universe._
-
-    val rn = em.registers((instruction >> 16) & 0xf)
-    val imm = value
-//    val rd = (instruction >>> 12) & 0xf
-//    val sBit = instruction & 0x00100000
-//    val imm12 = instruction & 0xfff
-    val carry_in = if(em.C_FLAG) 0 else 1
-    val result = rn + imm + carry_in
-
-    em.registers(rd) = result
+  def eorMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+    c.Expr(
+      q"""
+         val result = $em.registers(($instruction >> 16) & 0xf) ^ $value
+         $em.registers($rd) = result
+       """)
 
   }
 
-  def sbcMacro(c: Context)(): Unit = {
-    val rn = em.registers((instruction >> 16) & 0xf)
-    val imm = value
-    val carry_in = if(em.C_FLAG) 0 else 1
-    val result = rn - imm - carry_in
-    em.registers(rd) = result
+  def subMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val rn = $em.registers(($instruction >> 16) & 0xf)
+         val imm = $value
+         val result = rn - imm
+         $em.registers($rd) = result
+       """)
   }
 
-  def rscMacro(c: Context)(): Unit = {
-    val rn = em.registers((instruction >> 16) & 0xf)
-    val imm = value
-    val carry_in = if(em.C_FLAG) 0 else 1
-    val result = imm - rn - carry_in
-    em.registers(rd) = result
+  def rsbMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+    c.Expr(
+      q"""
+         val rn = $em.registers(($instruction >> 16) & 0xf)
+         val imm = $value
+         val result = imm - rn
+         $em.registers($rd) = result
+       """)
+  }
+
+  def addMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+    c.Expr(
+      q"""
+         val rn = $em.registers(($instruction >> 16) & 0xf)
+         val imm = $value
+         val result = rn + imm
+         $em.registers($rd) = result
+       """)
+  }
+
+  def adcMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val rn = $em.registers(($instruction >> 16) & 0xf)
+         val imm = $value
+         val carry_in = if($em.C_FLAG) 0 else 1
+         val result = rn + imm + carry_in
+         $em.registers($rd) = result
+       """)
+
+
+  }
+
+  def sbcMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val rn = $em.registers(($instruction >> 16) & 0xf)
+         val imm = $value
+         val carry_in = if($em.C_FLAG) 0 else 1
+         val result = rn - imm - carry_in
+         $em.registers($rd) = result
+       """)
+  }
+
+  def rscMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val rn = $em.registers(($instruction >> 16) & 0xf)
+         val imm = $value
+         val carry_in = if($em.C_FLAG) 0 else 1
+         val result = imm - rn - carry_in
+         $em.registers($rd) = result
+       """)
+
   }
 
   // incomplete need function to set flags
-  def tstMacro(c: Context)(): Unit = {
-    val result = em.registers((instruction >> 16) & 0x0f) & value
+  def tstMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val result = $em.registers(($instruction >> 16) & 0x0f) & $value
+       """)
   }
 
   // incomplete
-  def teqMacro(c: Context)(): Unit = {
-    val result = em.registers((instruction >> 16) & 0x0f) ^ value
+  def teqMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val result = $em.registers(($instruction >> 16) & 0x0f) ^ $value
+       """)
   }
 
   // incomplete
-  def cmpMacro(c: Context)(): Unit = {
-    val rn = em.registers((instruction >> 16) & 0xf)
-    val imm = value
-    val result = rn - imm
+  def cmpMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val rn = $em.registers(($instruction >> 16) & 0xf)
+         val imm = $value
+         val result = rn - imm
+       """)
+
   }
 
   // incomplete
-  def cmnMacro(c: Context)(): Unit = {
-    val rn = em.registers((instruction >> 16) & 0xf)
-    val imm = value
-    val result = rn + imm
+  def cmnMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val rn = $em.registers(($instruction >> 16) & 0xf)
+         val imm = $value
+         val result = rn + imm
+       """)
   }
 
-  def orrMacro(c: Context)(): Unit = {
-    val result = em.registers((instruction >> 16) & 0x0f) | value
-    em.registers(rd) = result
+  def orrMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val result = $em.registers(($instruction >> 16) & 0x0f) | $value
+         $em.registers($rd) = result
+       """)
   }
 
-  def movMacro(c: Context)(): Unit = {
-    val result = value
-    em.registers(rd) = result
+  def movMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val result = $value
+         $em.registers($rd) = result
+       """)
   }
 
-  def bicMacro(c: Context)(): Unit = {
-    val result = em.registers((instruction >> 16) & 0x0f) & (~value)
-    em.registers(rd) = result
+  def bicMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val result = $em.registers(($instruction >> 16) & 0x0f) & (~$value)
+         $em.registers($rd) = result
+       """)
   }
 
-  def mvnMacro(c: Context)(): Unit = {
-    val result = ~value
-    em.registers(rd) = result
+  def mvnMacro(c: Context)(): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         val result = ~$value
+         $em.registers($rd) = result
+       """)
+  }
+
+
+
+  def offsetImm(): Unit = offset = instruction & 0xfff
+  def offsetImm8(): Unit = offset = (instruction & 0x0f) | ((instruction >> 4) & 0xf0)
+  def offsetReg(): Unit = offset = em.registers(instruction & 0xf)
+  def offsetLSL(): Unit = offset = em.registers(instruction & 0xf) << em.registers((instruction>>7) & 31)
+  def offsetLSR(): Unit = {
+    val shift: Int = (instruction & 7) & 31
+    if(shift == 1) {
+      offset = em.registers(instruction & 0xf) >> shift
+    } else if((em.registers(instruction & 0xf) & 0x80000000) == 1) {
+      offset = 0xffffffff
+    } else {
+      offset = 0
+    }
+  }
+  def offsetASR(): Unit = {
+    val shift: Int = (instruction & 7) & 31
+    offset = em.registers(instruction & 0xf)
+
+    // call ror offset methods
+    if(shift == 1) 1 else 0
+  }
+  def offsetROR(): Unit = {
+    val shift: Int = (instruction & 7) & 31
+    offset = if(shift == 1) em.registers(instruction & 0xf) >> shift else 0
   }
 
   //
-  def postAddress() = {
+  def postAddress(): Int = em.registers(base)
 
-  }
+  def preDecAddress(): Int = em.registers(base - offset)
 
-  def preDecAddress(): Unit = {
-
-  }
-
-  def preIncAddress(): Unit = {
-
-  }
-
-
+  def preIncAddress(): Int = em.registers(base + offset)
 
   // Load and Store instructions
   def loadStore(): Unit = {
@@ -356,9 +479,15 @@ class ArmMacros(em: Emulator, instruction: Int) {
     var rn = (instruction >> 16) & 0xf
   }
 
-  def ldrMacro(instruction: Int): Unit = {
+  def ldrMacro(instruction: Int): c.Expr[Unit] = {
+    import c.universe._
 
+    c.Expr(
+      q"""
+
+       """)
   }
+
 
   def ldrbMacro(instruction: Int): Unit = {
 
@@ -445,7 +574,12 @@ class ArmMacros(em: Emulator, instruction: Int) {
 
   }
 
-  def armExecuteMacro(c: Context)(): Int = {
+  val c: Context
+  val armInstructionTable = List.fill(4096)(
+    andMacro(c)
+  )
+
+  def armExecuteMacro(): Int = {
     val instruction = 0
     val cond = instruction >> 28
     var cond_result = true
