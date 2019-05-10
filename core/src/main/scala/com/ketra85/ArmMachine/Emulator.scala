@@ -204,12 +204,12 @@ class Emulator() {
     prefetch(1) = memory.read32(nextPC + 4)
   }
 
-  def thumbPreftech(): Unit = {
+  def thumbPrefetch(): Unit = {
     prefetch(0) = memory.read16(nextPC)
     prefetch(1) = memory.read16(nextPC + 2)
   }
 
-  def thumbPreftechNext(): Unit = {
+  def thumbPrefetchNext(): Unit = {
     prefetch(1) = memory.read16(nextPC + 2)
   }
 }
