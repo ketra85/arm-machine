@@ -474,17 +474,12 @@ class ArmMacros(em: Emulator, instruction: Int) {
   def preIncAddress(): Int = em.registers(base + offset)
 
   // Load and Store instructions
-  def loadStore(): Unit = {
-    var rd = (instruction >> 12) & 0xf
-    var rn = (instruction >> 16) & 0xf
-  }
-
   def ldrMacro(instruction: Int): c.Expr[Unit] = {
     import c.universe._
 
     c.Expr(
       q"""
-
+        ${em.registers(rd)} = ${em.memory.read32(0)}
        """)
   }
 
@@ -579,8 +574,8 @@ class ArmMacros(em: Emulator, instruction: Int) {
     andMacro(c)
   )
 
-  def armExecuteMacro(): Int = {
-    val instruction = 0
+  def armExecuteMacro(instruction: Int): Int = {
+    val identifier = getMask(27, 25)
     val cond = instruction >> 28
     var cond_result = true
     if(cond != 0x0e) {
@@ -606,12 +601,52 @@ class ArmMacros(em: Emulator, instruction: Int) {
     }
 
     if(cond_result) {
-      (instruction: @switch) match {
-        case 
+      identifier match {
+        // Data Processing ops
+        case 0 || 1 => decodeDataProcessing(instruction)
+        case 2 || 3 || 4 => decodeLoadStore(instruction)
+        //branch case
+        case 5 => decodeBranch(instruction)
+        // Coprocesso
+        case 6 || 7 => decodeCoProcessing(instruction)
       }
     }
 
     return 1
   }
 
+  def getMask(a: Int, b: Int): Int = {
+    var mask: Int = 0
+    for(i: Int <- a; if i <= b) {
+      mask |= i << 1
+    }
+    return mask
+  }
+
+  // call shift operands
+  def decodeDataProcessing(instruction: Int): Unit = {
+    val op = (instruction >> 20) & 0x1f
+    (op >> 1) match {
+      case 0 => andMacro(instruction)
+      case 2 => subMacro(instruction)
+      case 4 => addMacro(instruction)
+    }
+  }
+
+  //offset and addressing calls
+  def decodeLoadStore(): Unit = {
+
+  }
+
+  def decodeMultiply(): Unit = {
+
+  }
+
+  def decodeBranch(): Unit = {
+
+  }
+
+  def decodeMisc(): Unit = {
+
+  }
 }
