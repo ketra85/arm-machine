@@ -514,8 +514,6 @@ class ArmMacros(em: Emulator) {
   }
 
 
-  object Offet {}
-
   // Misc ops
   def swp(instruction: Int): Unit = macro swpMacro
   def swpb(instruction: Int): Unit = macro swpbMacro
@@ -578,148 +576,169 @@ class ArmMacros(em: Emulator) {
        """)
   }
 
-
-
-  // Load and Store ops
-  def ldr(): Unit = macro ldrMacro
-  def ldrh(): Unit = macro ldrhMacro
-  def ldrb(): Unit = macro ldrbMacro
-  def ldrbt(): Unit = macro ldrbtMacro
-  def ldrsh(): Unit = macro ldrshMacro
-  def ldrsb(): Unit = macro ldrsbMacro
-  def ldrt(): Unit = macro ldrtMacro
-  def str(): Unit = macro strMacro
-  def strh(): Unit = macro strhMacro
-  def strb(): Unit = macro strbMacro
-  def strbt(): Unit = macro strbtMacro
-  def strt(): Unit = macro strtMacro
-
   // STM and LDM
 
   // Branching
-  def b(): Unit = macro bMacro
-  def bl(): Unit = macro blMacro
+  def b(instruction: Int): Unit = macro bMacro
+  def bl(instruction: Int): Unit = macro blMacro
 
   def mrc(): Unit = macro mrcMacro
   def swi(): Unit = macro swiMacro
 
+  // Load and Store ops
+  object loadStore {
 
+    def ldr(): Unit = macro ldrMacro
+//    def ldrh(): Unit = macro ldrhMacro
+//    def ldrb(): Unit = macro ldrbMacro
+//    def ldrbt(): Unit = macro ldrbtMacro
+//    def ldrsh(): Unit = macro ldrshMacro
+//    def ldrsb(): Unit = macro ldrsbMacro
+//    def ldrt(): Unit = macro ldrtMacro
+    def str(): Unit = macro strMacro
+//    def strh(): Unit = macro strhMacro
+//    def strb(): Unit = macro strbMacro
+//    def strbt(): Unit = macro strbtMacro
+//    def strt(): Unit = macro strtMacro
 
-
-
-  def offsetImm(): Unit = offset = instruction & 0xfff
-  def offsetImm8(): Unit = offset = (instruction & 0x0f) | ((instruction >> 4) & 0xf0)
-  def offsetReg(): Unit = offset = em.registers(instruction & 0xf)
-  def offsetLSL(): Unit = offset = em.registers(instruction & 0xf) << em.registers((instruction>>7) & 31)
-  def offsetLSR(): Unit = {
-    val shift: Int = (instruction & 7) & 31
-    if(shift == 1) {
-      offset = em.registers(instruction & 0xf) >> shift
-    } else if((em.registers(instruction & 0xf) & 0x80000000) == 1) {
-      offset = 0xffffffff
-    } else {
-      offset = 0
+    def offsetImm(): Unit = offset = instruction & 0xfff
+    def offsetImm8(): Unit = offset = (instruction & 0x0f) | ((instruction >> 4) & 0xf0)
+    def offsetReg(): Unit = offset = em.registers(instruction & 0xf)
+    def offsetLSL(): Unit = offset = em.registers(instruction & 0xf) << em.registers((instruction>>7) & 31)
+    def offsetLSR(): Unit = {
+      val shift: Int = (instruction & 7) & 31
+      if(shift == 1) {
+        offset = em.registers(instruction & 0xf) >> shift
+      } else if((em.registers(instruction & 0xf) & 0x80000000) == 1) {
+        offset = 0xffffffff
+      } else {
+        offset = 0
+      }
     }
+    def offsetASR(): Unit = {
+      val shift: Int = (instruction & 7) & 31
+      offset = em.registers(instruction & 0xf)
+
+      // call ror offset methods
+      if(shift == 1) 1 else 0
+    }
+    def offsetROR(): Unit = {
+      val shift: Int = (instruction & 7) & 31
+      offset = if(shift == 1) em.registers(instruction & 0xf) >> shift else 0
+    }
+
+    //
+    def postAddress(): Int = em.registers(base)
+
+    def preDecAddress(): Int = em.registers(base - offset)
+
+    def preIncAddress(): Int = em.registers(base + offset)
+
+    // Load and Store instructions
+    def ldrMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+      import c.universe._
+
+      c.Expr(
+        q"""
+        ${em.registers(rd)} = ${em.memory.read32(0)}
+       """)
+    }
+
+
+//    def ldrbMacro(instruction: Int): Unit = {
+//
+//    }
+//
+//    def ldrbtMacro(instruction: Int): Unit = {
+//
+//    }
+//
+//    def ldrhMacro(instruction: Int): Unit = {
+//
+//    }
+//
+//    def ldrsbMacro(instruction: Int): Unit = {
+//
+//    }
+//
+//    def ldrshMacro(instruction: Int): Unit = {
+//
+//    }
+//
+//    def ldrtMacro(instruction: Int): Unit = {
+//
+//    }
+
+    def strMacro(instruction: Int): Unit = {
+
+    }
+
+//    def strbMacro(instruction: Int): Unit = {
+//
+//    }
+//
+//    def strbtMacro(instruction: Int): Unit = {
+//
+//    }
+//
+//    def strhMacro(instruction: Int): Unit = {
+//
+//    }
+//
+//    def strtMacro(instruction: Int): Unit = {
+//
+//    }
   }
-  def offsetASR(): Unit = {
-    val shift: Int = (instruction & 7) & 31
-    offset = em.registers(instruction & 0xf)
 
-    // call ror offset methods
-    if(shift == 1) 1 else 0
+
+  // Branch
+  def bMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    var offset = instruction.value & 0x00ffffff
+    c.Expr(
+      q"""
+        if(($offset & 0x00800000) == 1) $offset |= 0xff000000
+
+        ${em.registers(15)} = $offset << 2
+        ${em.nextPC} = ${em.registers(15)}
+        ${em.registers(15)} += 4
+        ${em.armPrefetch()}
+      """)
   }
-  def offsetROR(): Unit = {
-    val shift: Int = (instruction & 7) & 31
-    offset = if(shift == 1) em.registers(instruction & 0xf) >> shift else 0
+
+  // Branch with link
+  def blMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    var offset = instruction.value & 0x00ffffff
+    c.Expr(
+      q"""
+        if(($offset & 0x00800000) == 1) $offset |= 0xff000000
+
+        ${em.registers(14)} = ${em.registers(15)} - 4
+        ${em.registers(15)} = $offset << 2
+        ${em.nextPC} = ${em.registers(15)}
+        ${em.registers(15)} += 4
+        ${em.armPrefetch()}
+      """)
   }
 
-  //
-  def postAddress(): Int = em.registers(base)
-
-  def preDecAddress(): Int = em.registers(base - offset)
-
-  def preIncAddress(): Int = em.registers(base + offset)
-
-  // Load and Store instructions
-  def ldrMacro(instruction: Int): c.Expr[Unit] = {
+  // SWI
+  def swiMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
     import c.universe._
 
     c.Expr(
       q"""
-        ${em.registers(rd)} = ${em.memory.read32(0)}
+        ${em.softwareInterrupt()}
        """)
   }
 
-
-  def ldrbMacro(instruction: Int): Unit = {
-
-  }
-
-  def ldrbtMacro(instruction: Int): Unit = {
-
-  }
-
-  def ldrhMacro(instruction: Int): Unit = {
-
-  }
-
-  def ldrsbMacro(instruction: Int): Unit = {
-
-  }
-
-  def ldrshMacro(instruction: Int): Unit = {
-
-  }
-
-  def ldrtMacro(instruction: Int): Unit = {
-
-  }
-
-  def strMacro(instruction: Int): Unit = {
-
-  }
-
-  def strbMacro(instruction: Int): Unit = {
-
-  }
-
-  def strbtMacro(instruction: Int): Unit = {
-
-  }
-
-  def strhMacro(instruction: Int): Unit = {
-
-  }
-
-  def strtMacro(instruction: Int): Unit = {
-
-  }
-
-
-  // incomplete
-  def bMacro(c: Context)(): Unit = {
-    var offset = instruction & 0x00ffffff
-    if((offset & 0x00800000) == 1) {
-      offset |= 0xff000000
-    } else {
-      em.registers(15) = offset << 2
-
-      em.registers(15) += 4
-
-    }
-  }
-
-  // incomplete
-  def blMacro(c: Context)(): Unit = {
-  }
-
-  // incomplete
-  def swiMacro(c: Context)(): Unit = {
-
-  }
-
   def armExecuteMacro(instruction: Int): Int = {
-    val identifier = getMask(27, 25)
+    // Only twelve bits needed to decode
+    // bits[27:20] (inclusive)
+    val identifier = (instruction & 0x0fffffff) >> 20
+//    val id = identifier >> 5
     val cond = instruction >> 28
     var cond_result = true
     if(cond != 0x0e) {
@@ -747,12 +766,17 @@ class ArmMacros(em: Emulator) {
     if(cond_result) {
       identifier match {
         // Data Processing ops
-        case 0 || 1 => decodeDataProcessing(instruction)
-        case 2 || 3 || 4 => decodeLoadStore(instruction)
-        //branch case
-        case 5 => decodeBranch(instruction)
-        // Coprocesso
-        case 6 || 7 => decodeCoProcessing(instruction)
+        case 0 => decodeDataProcessing(instruction)
+        // Load and Store ops
+        case 1 => decodeLoadStore(instruction)
+        //branch ops
+        case 2 => b(instruction)
+        case 3 => bl(instruction)
+        // Co-processing ops
+        case 4 => decodeCoProcessing(instruction)
+        case 5 => swi()
+        case 6 || 7 =>
+        case _ =>
       }
     }
 
@@ -769,7 +793,7 @@ class ArmMacros(em: Emulator) {
 
   // call shift operands
   def decodeDataProcessing(instruction: Int): Unit = {
-    val op = (instruction >> 20) & 0x1f
+    val op = (instruction >> 20)
     ALU.init(instruction)
 
     (op >> 1) match {
@@ -788,11 +812,19 @@ class ArmMacros(em: Emulator) {
 
   }
 
-  def decodeBranch(instruction: Int): Unit = {
+//  def decodeBranch(instruction: Int): Unit = {
+//    val op = (instruction >> 24)
+//    op match {
+//      case 1 => b()
+//      case 0 => bl()
+//    }
+//  }
+
+  def decodeMisc(instruction: Int): Unit = {
 
   }
 
-  def decodeMisc(instruction: Int): Unit = {
+  def decodeCoProcessing(instruction: Int): Unit = {
 
   }
 }
