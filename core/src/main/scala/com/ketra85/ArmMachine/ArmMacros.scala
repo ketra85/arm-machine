@@ -26,6 +26,170 @@ class ArmMacros(em: Emulator) {
       carry_out = em.cpsr.isSet(Flag.C)
     }
 
+    def LSLImm(): Unit = {
+      val shift = (inst >> 7) & 0x1f
+
+      if (shift == 0) {
+        value = em.registers(inst & 0x0f)
+      } else {
+        val v = em.registers(inst & 0x0f)
+        carry_out = (((v >> (32 - shift)) & 1) == 1)
+        value = v << shift
+      }
+    }
+
+    def LSLReg(): Unit = {
+      val shift = em.registers((inst >> 8) & 15)
+      var rm = em.registers(inst & 0x0f)
+
+      if((inst & 0x0f) == 15) rm += 4
+
+      if(shift == 0) {
+        if(shift == 32) {
+          value = 0
+          carry_out = (rm & 1) == 1
+        } else if(shift < 32) {
+          val v = rm
+          carry_out = ((v >> (32 - shift)) & 1) == 1
+          value = v << shift
+        } else {
+          value = 0
+          carry_out = false
+        }
+      } else {
+        value = rm
+      }
+    }
+
+    def LSRImm(): Unit = {
+      val shift = (inst >> 7) & 0x1f
+
+      if (shift == 0) {
+        val v = em.registers(inst & 0x0f)
+        carry_out = ((v >> (shift - 1)) & 1) == 1
+        value = v >> shift
+      } else {
+        value = 0
+        carry_out = (em.registers(inst & 0x0f) & 0x80000000) == 1
+      }
+    }
+
+    def LSRReg(): Unit = {
+      val shift = em.registers((inst >> 8) & 15)
+      var rm = em.registers(inst & 0x0f)
+
+      if((inst & 0x0f) == 15) rm += 4
+
+      if(shift == 0) {
+        if(shift == 32) {
+          value = 0
+          carry_out = (rm & 0x80000000) == 1
+        } else if(shift < 32) {
+          val v = rm
+          carry_out = ((v >> (shift - 1)) & 1) == 1
+          value = v >> shift
+        } else {
+          value = 0
+          carry_out = false
+        }
+      } else {
+        value = rm
+      }
+    }
+
+    def ASRImm(): Unit = {
+      val shift = (inst >> 7) & 0x1f
+
+      if (shift == 0) {
+        val v = em.registers(inst & 0x0f)
+        carry_out = ((v >> (shift - 1)) & 1) == 1
+        value = v >> shift
+      } else {
+        if((em.registers(inst & 0x0f) & 0x80000000) == 1) {
+          value = 0xFFFFFFFF
+          carry_out = true
+        } else {
+          value = 0
+          carry_out = false
+        }
+      }
+    }
+
+    def ASRReg(): Unit = {
+      val shift = em.registers((inst >> 8) & 15)
+      var rm = em.registers(inst & 0x0f)
+
+      if((inst & 0x0f) == 15) rm += 4
+
+      if(shift < 32) {
+        if(shift == 0) {
+          val v = rm
+          carry_out = ((v >> (shift - 1)) & 1) == 1
+          value = v >> shift
+        } else {
+          value = rm
+        }
+      } else {
+        if((em.registers(inst & 0x0f) & 0x80000000) == 1) {
+          value = 0xFFFFFFFF
+          carry_out = true
+        } else {
+          value = 0
+          carry_out = false
+        }
+      }
+    }
+
+    def RORImm(): Unit = {
+      val shift = (inst >> 7) & 0x1f
+      val carry_in = if(em.C_FLAG) 1 else 0
+
+      if (shift == 0) {
+        val v = em.registers(inst & 0x0f)
+        carry_out = ((v >> (shift - 1)) & 1) == 1
+        value = (v << (32 - shift)) | (v >> shift)
+      } else {
+        val v = em.registers(inst & 0x0f)
+        carry_out = ((v & 1)) == 1
+        // assign these values?
+        value = (v >> 1) | (carry_in << 31)
+      }
+    }
+
+    def RORReg(): Unit = {
+      val shift = em.registers((inst >> 8) & 15)
+      var rm = em.registers(inst & 0x0f)
+
+      if((inst & 0x0f) == 15) rm += 4
+
+      if((shift & 0x1f) == 1) {
+        val v = rm
+        carry_out = ((v >> (shift - 1)) & 1) == 1
+        value = (v << (32 -  shift)) | (v >> shift)
+      } else {
+        value = rm
+        if(shift == 0) carry_out = ((value & 0x80000000) == 1)
+
+      }
+    }
+
+    def valueImm(): Unit = {
+      val shift = (inst & 0xf00) >> 7
+
+      if (shift == 0) {
+        val v = inst & 0xff
+        carry_out = ((v >> (shift - 1)) & 1) == 1
+        value = (v << (32 - shift)) | (v >> shift)
+      } else {
+        value = inst & 0xff
+      }
+    }
+
+    //  def ROR_IMM_MSR(): Unit = {
+    //    val v = instruction & 0xff
+    //    value = ((v << (32 -shift)))
+    //  }
+
     def and(): Unit = macro andMacro
     def eor(): Unit = macro eorMacro
     def sub(): Unit = macro subMacro
@@ -348,169 +512,7 @@ class ArmMacros(em: Emulator) {
   // Data Processing shift operations
   object Shift {
 
-    def LSLImm(): Unit = {
-      val shift = (instruction >> 7) & 0x1f
 
-      if (shift == 0) {
-        value = em.registers(instruction & 0x0f)
-      } else {
-        val v = em.registers(instruction & 0x0f)
-        carry_out = (((v >> (32 - shift)) & 1) == 1)
-        value = v << shift
-      }
-    }
-
-    def LSLReg(): Unit = {
-      val shift = em.registers((instruction >> 8) & 15)
-      var rm = em.registers(instruction & 0x0f)
-
-      if((instruction & 0x0f) == 15) rm += 4
-
-      if(shift == 0) {
-        if(shift == 32) {
-          value = 0
-          carry_out = (rm & 1) == 1
-        } else if(shift < 32) {
-          val v = rm
-          carry_out = ((v >> (32 - shift)) & 1) == 1
-          value = v << shift
-        } else {
-          value = 0
-          carry_out = false
-        }
-      } else {
-        value = rm
-      }
-    }
-
-    def LSRImm(): Unit = {
-      val shift = (instruction >> 7) & 0x1f
-
-      if (shift == 0) {
-        val v = em.registers(instruction & 0x0f)
-        carry_out = ((v >> (shift - 1)) & 1) == 1
-        value = v >> shift
-      } else {
-        value = 0
-        carry_out = (em.registers(instruction & 0x0f) & 0x80000000) == 1
-      }
-    }
-
-    def LSRReg(): Unit = {
-      val shift = em.registers((instruction >> 8) & 15)
-      var rm = em.registers(instruction & 0x0f)
-
-      if((instruction & 0x0f) == 15) rm += 4
-
-      if(shift == 0) {
-        if(shift == 32) {
-          value = 0
-          carry_out = (rm & 0x80000000) == 1
-        } else if(shift < 32) {
-          val v = rm
-          carry_out = ((v >> (shift - 1)) & 1) == 1
-          value = v >> shift
-        } else {
-          value = 0
-          carry_out = false
-        }
-      } else {
-        value = rm
-      }
-    }
-
-    def ASRImm(): Unit = {
-      val shift = (instruction >> 7) & 0x1f
-
-      if (shift == 0) {
-        val v = em.registers(instruction & 0x0f)
-        carry_out = ((v >> (shift - 1)) & 1) == 1
-        value = v >> shift
-      } else {
-        if((em.registers(instruction & 0x0f) & 0x80000000) == 1) {
-          value = 0xFFFFFFFF
-          carry_out = true
-        } else {
-          value = 0
-          carry_out = false
-        }
-      }
-    }
-
-    def ASRReg(): Unit = {
-      val shift = em.registers((instruction >> 8) & 15)
-      var rm = em.registers(instruction & 0x0f)
-
-      if((instruction & 0x0f) == 15) rm += 4
-
-      if(shift < 32) {
-        if(shift == 0) {
-          val v = rm
-          carry_out = ((v >> (shift - 1)) & 1) == 1
-          value = v >> shift
-        } else {
-          value = rm
-        }
-      } else {
-        if((em.registers(instruction & 0x0f) & 0x80000000) == 1) {
-          value = 0xFFFFFFFF
-          carry_out = true
-        } else {
-          value = 0
-          carry_out = false
-        }
-      }
-    }
-
-    def RORImm(): Unit = {
-      val shift = (instruction >> 7) & 0x1f
-      val carry_in = if(em.C_FLAG) 1 else 0
-
-      if (shift == 0) {
-        val v = em.registers(instruction & 0x0f)
-        carry_out = ((v >> (shift - 1)) & 1) == 1
-        value = (v << (32 - shift)) | (v >> shift)
-      } else {
-        val v = em.registers(instruction & 0x0f)
-        carry_out = ((v & 1)) == 1
-        // assign these values?
-        value = (v >> 1) | (carry_in << 31)
-      }
-    }
-
-    def RORReg(): Unit = {
-      val shift = em.registers((instruction >> 8) & 15)
-      var rm = em.registers(instruction & 0x0f)
-
-      if((instruction & 0x0f) == 15) rm += 4
-
-      if((shift & 0x1f) == 1) {
-        val v = rm
-        carry_out = ((v >> (shift - 1)) & 1) == 1
-        value = (v << (32 -  shift)) | (v >> shift)
-      } else {
-        value = rm
-        if(shift == 0) carry_out = ((value & 0x80000000) == 1)
-
-      }
-    }
-
-    def valueImm(): Unit = {
-      val shift = (instruction & 0xf00) >> 7
-
-      if (shift == 0) {
-        val v = instruction & 0xff
-        carry_out = ((v >> (shift - 1)) & 1) == 1
-        value = (v << (32 - shift)) | (v >> shift)
-      } else {
-        value = instruction & 0xff
-      }
-    }
-
-    //  def ROR_IMM_MSR(): Unit = {
-    //    val v = instruction & 0xff
-    //    value = ((v << (32 -shift)))
-    //  }
   }
 
 
@@ -737,8 +739,9 @@ class ArmMacros(em: Emulator) {
   def armExecuteMacro(instruction: Int): Int = {
     // Only twelve bits needed to decode
     // bits[27:20] (inclusive)
-    val identifier = (instruction & 0x0fffffff) >> 20
-//    val id = identifier >> 5
+//    val identifier = (instruction >> 20) & 0x0ff
+    val identifier = (instruction >> 25) & 7
+    val op = (instruction >> 4) & 1
     val cond = instruction >> 28
     var cond_result = true
     if(cond != 0x0e) {
@@ -764,19 +767,15 @@ class ArmMacros(em: Emulator) {
     }
 
     if(cond_result) {
-      identifier match {
+      identifier >> 1 match {
         // Data Processing ops
         case 0 => decodeDataProcessing(instruction)
         // Load and Store ops
-        case 1 => decodeLoadStore(instruction)
+        case 1 => if((identifier & 1) == 1) decodeMedia(instruction) else decodeLoadStore(instruction)
         //branch ops
-        case 2 => b(instruction)
-        case 3 => bl(instruction)
-        // Co-processing ops
-        case 4 => decodeCoProcessing(instruction)
-        case 5 => swi()
-        case 6 || 7 =>
-        case _ =>
+        case 2 => decodeBranch(instruction)
+        case 3 => decodeCoProcessing(instruction)
+        case _ => null
       }
     }
 
@@ -793,10 +792,11 @@ class ArmMacros(em: Emulator) {
 
   // call shift operands
   def decodeDataProcessing(instruction: Int): Unit = {
-    val op = (instruction >> 20)
+    val op = (instruction >> 21) & 15
+    val stateChange = op & 1
     ALU.init(instruction)
 
-    (op >> 1) match {
+    op match {
       case 0 => ALU.and()
       case 2 => ALU.sub()
       case 4 => ALU.add()
@@ -805,20 +805,31 @@ class ArmMacros(em: Emulator) {
 
   //offset and addressing calls
   def decodeLoadStore(instruction: Int): Unit = {
-
+    val op = (instruction >> 20) & 0x0ff
+    op match {
+      case _ =>
+    }
   }
 
   def decodeMultiply(instruction: Int): Unit = {
 
   }
 
-//  def decodeBranch(instruction: Int): Unit = {
-//    val op = (instruction >> 24)
+  def decodeBranch(instruction: Int): Unit = {
+    val op = (instruction >> 25) & 7
+    op match {
+      case 1 => //todo
+      case 5 => if((instruction & 0x01000000) == 1) bl(instruction) else b(instruction)
+    }
+  }
+
+  def decodeMedia(instruction: Int): Unit = {
+    val op = (instruction >> 20) & 0x0ff
 //    op match {
 //      case 1 => b()
 //      case 0 => bl()
 //    }
-//  }
+  }
 
   def decodeMisc(instruction: Int): Unit = {
 
