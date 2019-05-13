@@ -6,15 +6,50 @@ import scala.reflect.macros.blackbox.Context
 
 class ArmMacros(em: Emulator) {
 
-  var offset: Int
-  var base: Int
-
   // Data processing ops except multiplication
   object ALU {
     var value: Int = 0
     var rd: Int = 0
     var carry_out: Boolean = false
     var inst: Int = 0
+
+    def negative(i: Int): Int = i >> 31
+    def positive(i: Int): Int = ~i >> 31
+
+
+    def setConditionalLogical(res: Int): Unit = {
+      em.N_FLAG = res < 0
+      em.Z_FLAG = res == 0
+      em.C_FLAG = carry_out
+    }
+
+    def setConditionalAdd(res: Int, lhs: Int, rhs: Int): Unit = {
+      em.N_FLAG = res < 0
+      em.Z_FLAG = res == 0
+      em.V_FLAG = ((negative(lhs) & negative(rhs) & positive(res)) |
+                  (positive(lhs) & positive(rhs) & negative(res))) == 1
+      em.C_FLAG = ((negative(lhs) & negative(rhs)) |
+                  (negative(lhs) & positive(res)) |
+                  (negative(rhs) & positive(res))) == 1
+    }
+
+    def setConditionalSub(res: Int, lhs: Int, rhs: Int): Unit = {
+      em.N_FLAG = res < 0
+      em.Z_FLAG = res == 0
+      em.V_FLAG = ((negative(lhs) & positive(rhs) & positive(res)) |
+                  (positive(lhs) & negative(rhs) & negative(res))) == 1
+      em.C_FLAG = ((negative(lhs) & positive(rhs)) |
+                  (negative(lhs) & positive(res)) |
+                  (positive(rhs) & positive(res))) == 1
+    }
+
+    def checkPc(setConditional: (Int, Int, Int) => Unit): Unit = {
+      if(rd != 15) setConditional
+    }
+
+    def checkPc(setConditional: (Int) => Unit): Unit = {
+      if(rd != 15) setConditional
+    }
 
     def init(instruction: Int): Unit = {
       inst = instruction
@@ -182,10 +217,10 @@ class ArmMacros(em: Emulator) {
       }
     }
 
-    //  def ROR_IMM_MSR(): Unit = {
-    //    val v = instruction & 0xff
-    //    value = ((v << (32 -shift)))
-    //  }
+//    def ROR_IMM_MSR(): Unit = {
+//      val v = inst & 0xff
+//      value = ((v << (32 -shift)) | (offset >> shift))
+//    }
 
     def and(): Unit = macro andMacro
     def eor(): Unit = macro eorMacro
@@ -578,7 +613,7 @@ class ArmMacros(em: Emulator) {
 
   // Load and Store ops
   object loadStore {
-    val instruction: Int = 0
+    var instruction: Int = 0
     var dest: Int = 0
     var base: Int = 0
     var address: Int = 0
@@ -630,9 +665,9 @@ class ArmMacros(em: Emulator) {
     def offsetLSL(): Unit = offset = em.registers(instruction & 0xf) << em.registers((instruction>>7) & 31)
     def offsetLSR(): Unit = {
       val shift: Int = (instruction & 7) & 31
-      if(shift == 1) {
+      if(shift == 31) {
         offset = em.registers(instruction & 0xf) >> shift
-      } else if((em.registers(instruction & 0xf) & 0x80000000) == 1) {
+      } else if((em.registers(instruction & 0xf) & 0x80000000) == 0x80000000) {
         offset = 0xffffffff
       } else {
         offset = 0
@@ -640,14 +675,23 @@ class ArmMacros(em: Emulator) {
     }
     def offsetASR(): Unit = {
       val shift: Int = (instruction >> 7) & 31
-      offset = em.registers(instruction & 0xf)
 
-      // call ror offset methods
-      if(shift == 1) 1 else 0
+      if(shift == 31) {
+        offset = em.registers(15) >> shift
+      } else if((em.registers(instruction & 15) & 0x8000000) == 0x8000000) {
+        offset = 0xffffffff
+      } else {
+        offset = 0
+      }
     }
     def offsetROR(): Unit = {
       val shift: Int = (instruction & 7) & 31
-      offset = if(shift == 1) em.registers(instruction & 0xf) >> shift else 0
+      offset = em.registers(instruction & 15)
+      if(shift == 31) {
+        offset = (offset << (32) - shift) | (offset >> shift)
+      } else {
+        offset = (offset >> 1) | (if(em.C_FLAG) 1 << 31 else 0 << 31)
+      }
     }
 
     // Addressing
@@ -671,62 +715,85 @@ class ArmMacros(em: Emulator) {
     def writeBackPostDec(): Unit = em.registers(base) = address - offset
     def writeBackPostInc(): Unit = em.registers(base) = address + offset
 
+    // STR[T] Rd, [Rn], -#
     def strPostDec(calculateOffset: () => Unit,
                    storeData: () => Unit
                   ): Unit = {
       STRInit(calculateOffset, postAddress, storeData, writeBackNone, writeBackPostDec)
     }
+
+    // STR[T] Rd, [Rn], #
     def strPostInc(calculateOffset: () => Unit,
                    storeData: () => Unit
                   ): Unit = {
       STRInit(calculateOffset, preDecAddress, storeData, writeBackNone, writeBackPostInc)
     }
+
+    // STR Rd, [Rn, -#]
     def strPreDec(calculateOffset: () => Unit,
                    storeData: () => Unit
                   ): Unit = {
       STRInit(calculateOffset, preDecAddress, storeData, writeBackNone, writeBackNone)
     }
+
+    // STR Rd, [Rn, -#]!
     def strPreDecWB(calculateOffset: () => Unit,
                    storeData: () => Unit
                   ): Unit = {
       STRInit(calculateOffset, preDecAddress, storeData, writeBackPre, writeBackNone)
 
     }
+
+    // STR Rd, [Rn, #]
     def strPreInc(calculateOffset: () => Unit,
                    storeData: () => Unit
                   ): Unit = {
       STRInit(calculateOffset, preIncAddress, storeData, writeBackNone, writeBackNone)
     }
+
+    // STR Rd, [Rn, #]!
     def strPreIncWB(calculateOffset: () => Unit,
                    storeData: () => Unit
                   ): Unit = {
       STRInit(calculateOffset, preIncAddress, storeData, writeBackPre, writeBackNone)
     }
+
+    // LDR[T] Rd, [Rn], -#
     def ldrPostDec(calculateOffset: () => Unit,
                    loadData: () => Unit
                   ): Unit = {
       LDRInit(calculateOffset, postAddress, loadData, writeBackPostDec)
     }
+
+    // LDR Rd, [Rn], #
     def ldrPostInc(calculateOffset: () => Unit,
                    loadData: () => Unit
                   ): Unit = {
       LDRInit(calculateOffset, postAddress, loadData, writeBackPostInc)
     }
+
+    // LDR Rd, [Rn, -#]
     def ldrPreDec(calculateOffset: () => Unit,
                   loadData: () => Unit
                   ): Unit = {
       LDRInit(calculateOffset, preDecAddress, loadData, writeBackNone)
     }
+
+    // LDR Rd, [Rn, -#]!
     def ldrPreDecWB(calculateOffset: () => Unit,
                     loadData: () => Unit
                   ): Unit = {
       LDRInit(calculateOffset, preDecAddress, loadData, writeBackPre)
     }
+
+    // LDR Rd, [Rn, #]
     def ldrPreInc(calculateOffset: () => Unit,
                   loadData: () => Unit
                   ): Unit = {
       LDRInit(calculateOffset, preIncAddress, loadData, writeBackNone)
     }
+
+    // LDR Rd, [Rn, #]!
     def ldrPreIncWB(calculateOffset: () => Unit,
                     loadData: () => Unit
                   ): Unit = {
@@ -734,266 +801,333 @@ class ArmMacros(em: Emulator) {
     }
 
     // STR Rd, [Rn, -#]
-    def STROffsetImmPreDec(instruction: Int): Unit = {
+    def STROffsetImmPreDec(opcode: Int): Unit = {
+      instruction = opcode
       strPreDec(offsetImm, execSTR)
     }
 
     // LDR Rd, [Rn, -#]
-    def LDROffsetImmPreDec(instruction: Int): Unit = {
+    def LDROffsetImmPreDec(opcode: Int): Unit = {
+      instruction = opcode
       strPreDec(offsetImm, execLDR)
     }
 
     // STR Rd, [Rn, -#]!
-    def STROffsetImmPreDecWB(instruction: Int): Unit = {
+    def STROffsetImmPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreDecWB(offsetImm, execSTR)
     }
 
     // LDR Rd, [Rn, -#]!
-    def LDROffsetImmPreDecWB(instruction: Int): Unit = {
+    def LDROffsetImmPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreDecWB(offsetImm, execLDR)
     }
 
     // STR Rd, [Rn, #]
-    def STROffsetImmPreInc(instruction: Int): Unit = {
+    def STROffsetImmPreInc(opcode: Int): Unit = {
+      instruction = opcode
       strPreInc(offsetImm, execSTR)
     }
 
     // LDR Rd, [Rn, #]
-    def LDROffsetImmPreInc(instruction: Int): Unit = {
+    def LDROffsetImmPreInc(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreInc(offsetImm, execLDR)
     }
 
     // STR Rd, [Rn, #]!
-    def STROffsetImmPreIncWB(instruction: Int): Unit = {
+    def STROffsetImmPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreIncWB(offsetImm, execSTR)
     }
 
     // LDR Rd, [Rn, #]!
-    def LDROffsetImmPreIncWB(instruction: Int): Unit = {
+    def LDROffsetImmPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreIncWB(offsetImm, execLDR)
     }
 
     // STR[T] Rd, [Rn], -Rm, LSL #
-    def STROffsetLSLPostDec(instruction: Int): Unit = {
+    def STROffsetLSLPostDec(opcode: Int): Unit = {
+      instruction = opcode
       strPostDec(offsetLSL, execSTR)
     }
 
     // STR[T] Rd, [Rn], -Rm, LSR #
-    def STROffsetLSRPostDec(instruction: Int): Unit = {
+    def STROffsetLSRPostDec(opcode: Int): Unit = {
+      instruction = opcode
       strPostDec(offsetLSR, execSTR)
     }
 
     // STR[T] Rd, [Rn], -Rm, ASR #
-    def STROffsetASRPostDec(instruction: Int): Unit = {
+    def STROffsetASRPostDec(opcode: Int): Unit = {
+      instruction = opcode
       strPostDec(offsetASR, execSTR)
     }
     // STR[T] Rd, [Rn], -Rm, ROR #
-    def STROffsetRORPostDec(instruction: Int): Unit = {
+    def STROffsetRORPostDec(opcode: Int): Unit = {
+      instruction = opcode
       strPostDec(offsetROR, execSTR)
     }
 
     // LDR[T] Rd, [Rn], -Rm, LSL #
-    def LDROffsetLSLPostDec(instruction: Int): Unit = {
+    def LDROffsetLSLPostDec(opcode: Int): Unit = {
+      instruction = opcode
       ldrPostDec(offsetLSL, execLDR)
     }
 
     // LDR[T] Rd, [Rn], -Rm, LSR #
-    def LDROffsetLSRPostDec(instruction: Int): Unit = {
+    def LDROffsetLSRPostDec(opcode: Int): Unit = {
+      instruction = opcode
       ldrPostDec(offsetLSR, execLDR)
     }
 
     // LDR[T] Rd, [Rn], -Rm, ASR #
-    def LDROffsetASRPostDec(instruction: Int): Unit = {
+    def LDROffsetASRPostDec(opcode: Int): Unit = {
+      instruction = opcode
       ldrPostDec(offsetASR, execLDR)
     }
 
     // LDR[T] Rd, [Rn], -Rm, ROR #
-    def LDROffsetRORPostDec(instruction: Int): Unit = {
+    def LDROffsetRORPostDec(opcode: Int): Unit = {
+      instruction = opcode
       ldrPostDec(offsetROR, execLDR)
     }
 
     // STR[T] Rd, [Rn], Rm, LSL #
-    def STROffsetLSLPostInc(instruction: Int): Unit = {
+    def STROffsetLSLPostInc(opcode: Int): Unit = {
+      instruction = opcode
       strPostInc(offsetLSL, execSTR)
     }
 
     // STR[T] Rd, [Rn], Rm, LSR #
-    def STROffsetLSRPostInc(instruction: Int): Unit = {
+    def STROffsetLSRPostInc(opcode: Int): Unit = {
+      instruction = opcode
       strPostInc(offsetLSR, execSTR)
     }
 
     // STR[T] Rd, [Rn], Rm, ASR #
-    def STROffsetASRPostInc(instruction: Int): Unit = {
+    def STROffsetASRPostInc(opcode: Int): Unit = {
+      instruction = opcode
       strPostInc(offsetASR, execSTR)
     }
     // STR[T] Rd, [Rn], Rm, ROR #
-    def STROffsetRORPostInc(instruction: Int): Unit = {
+    def STROffsetRORPostInc(opcode: Int): Unit = {
+      instruction = opcode
       strPostInc(offsetROR, execSTR)
     }
 
     // LDR[T] Rd, [Rn], Rm, LSL #
-    def LDROffsetLSLPostInc(instruction: Int): Unit = {
+    def LDROffsetLSLPostInc(opcode: Int): Unit = {
+      instruction = opcode
       ldrPostInc(offsetLSL, execLDR)
     }
 
     // LDR[T] Rd, [Rn], Rm, LSR #
-    def LDROffsetLSRPostInc(instruction: Int): Unit = {
+    def LDROffsetLSRPostInc(opcode: Int): Unit = {
+      instruction = opcode
       ldrPostInc(offsetLSR, execLDR)
     }
 
     // LDR[T] Rd, [Rn], Rm, ASR #
-    def LDROffsetASRPostInc(instruction: Int): Unit = {
+    def LDROffsetASRPostInc(opcode: Int): Unit = {
+      instruction = opcode
       ldrPostInc(offsetASR, execLDR)
     }
 
     // LDR[T] Rd, [Rn], Rm, ROR #
-    def LDROffsetRORPostInc(instruction: Int): Unit = {
+    def LDROffsetRORPostInc(opcode: Int): Unit = {
+      instruction = opcode
       ldrPostInc(offsetROR, execLDR)
     }
 
     // STR Rd, [Rn, -Rm, LSL #]
-    def STROffsetLSLPreDec(instruction: Int): Unit = {
+    def STROffsetLSLPreDec(opcode: Int): Unit = {
+      instruction = opcode
       strPreDec(offsetLSL, execSTR)
     }
 
     // STR Rd, [Rn, -Rm, LSR #]
-    def STROffsetLSRPreDec(instruction: Int): Unit = {
+    def STROffsetLSRPreDec(opcode: Int): Unit = {
+      instruction = opcode
       strPreDec(offsetLSR, execSTR)
     }
 
     // STR Rd, [Rn, -Rm, ASR #]
-    def STROffsetASRPreDec(instruction: Int): Unit = {
+    def STROffsetASRPreDec(opcode: Int): Unit = {
+      instruction = opcode
       strPreDec(offsetASR, execSTR)
     }
 
     // STR Rd, [Rn, -Rm, ROR #]
-    def STROffsetRORPreDec(instruction: Int): Unit = {
+    def STROffsetRORPreDec(opcode: Int): Unit = {
+      instruction = opcode
       strPreDec(offsetROR, execSTR)
     }
 
     // LDR Rd, [Rn, -Rm, LSL #]
-    def LDROffsetLSLPreDec(instruction: Int): Unit = {
+    def LDROffsetLSLPreDec(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreDec(offsetLSL, execLDR)
     }
     // LDR Rd, [Rn, -Rm, LSR #]
-    def LDROffsetLSRPreDec(instruction: Int): Unit = {
+    def LDROffsetLSRPreDec(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreDec(offsetLSR, execLDR)
     }
     // LDR Rd, [Rn, -Rm, ASR #]
-    def LDROffsetASRPreDec(instruction: Int): Unit = {
+    def LDROffsetASRPreDec(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreDec(offsetASR, execLDR)
     }
     // LDR Rd, [Rn, -Rm, ROR #]
-    def LDROffsetRORPreDec(instruction: Int): Unit = {
+    def LDROffsetRORPreDec(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreDec(offsetROR, execLDR)
     }
 
     // STR Rd, [Rn, -Rm, LSL #]!
-    def STROffsetLSLPreDecWB(instruction: Int): Unit = {
+    def STROffsetLSLPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreDecWB(offsetLSL, execSTR)
     }
+
     // STR Rd, [Rn, -Rm, LSR #]!
-    def STROffsetLSRPreDecWB(instruction: Int): Unit = {
+    def STROffsetLSRPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreDecWB(offsetLSR, execSTR)
     }
+
     // STR Rd, [Rn, -Rm, ASR #]!
-    def STROffsetASRPreDecWB(instruction: Int): Unit = {
+    def STROffsetASRPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreDecWB(offsetASR, execSTR)
     }
+
     // STR Rd, [Rn, -Rm, ROR #]!
-    def STROffsetRORPreDecWB(instruction: Int): Unit = {
+    def STROffsetRORPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreDecWB(offsetROR, execSTR)
     }
 
     // LDR Rd, [Rn, -Rm, LSL #]!
-    def LDROffsetLSLPreDecWB(instruction: Int): Unit = {
+    def LDROffsetLSLPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreDecWB(offsetLSL, execLDR)
     }
+
     // LDR Rd, [Rn, -Rm, LSR #]!
-    def LDROffsetLSRPreDecWB(instruction: Int): Unit = {
+    def LDROffsetLSRPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreDecWB(offsetLSR, execLDR)
     }
+
     // LDR Rd, [Rn, -Rm, ASR #]!
-    def LDROffsetASRPreDecWB(instruction: Int): Unit = {
+    def LDROffsetASRPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreDecWB(offsetASR, execLDR)
     }
+
     // LDR Rd, [Rn, -Rm, ROR #]!
-    def LDROffsetRORPreDecWB(instruction: Int): Unit = {
+    def LDROffsetRORPreDecWB(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreDecWB(offsetROR, execLDR)
     }
 
     // STR Rd, [Rn, Rm, LSL #]
-    def STROffsetLSLPreInc(instruction: Int): Unit = {
+    def STROffsetLSLPreInc(opcode: Int): Unit = {
+      instruction = opcode
       strPreInc(offsetLSL, execSTR)
     }
+
     // STR Rd, [Rn, Rm, LSR #]
-    def STROffsetLSRPreInc(instruction: Int): Unit = {
+    def STROffsetLSRPreInc(opcode: Int): Unit = {
+      instruction = opcode
       strPreInc(offsetLSR, execSTR)
     }
+
     // STR Rd, [Rn, Rm, ASR #]
-    def STROffsetASRPreInc(instruction: Int): Unit = {
+    def STROffsetASRPreInc(opcode: Int): Unit = {
+      instruction = opcode
       strPreInc(offsetASR, execSTR)
     }
+
     // STR Rd, [Rn, Rm, ROR #]
-    def STROffsetRORPreInc(instruction: Int): Unit = {
+    def STROffsetRORPreInc(opcode: Int): Unit = {
+      instruction = opcode
       strPreInc(offsetROR, execSTR)
     }
 
     // LDR Rd, [Rn, Rm, LSL #]
-    def LDROffsetLSLPreInc(instruction: Int): Unit = {
+    def LDROffsetLSLPreInc(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreInc(offsetLSL, execLDR)
     }
+
     // LDR Rd, [Rn, Rm, LSR #]
-    def LDROffsetLSRPreInc(instruction: Int): Unit = {
+    def LDROffsetLSRPreInc(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreInc(offsetLSR, execLDR)
     }
 
     // LDR Rd, [Rn, Rm, ASR #]
-    def LDROffsetASRPreInc(instruction: Int): Unit = {
+    def LDROffsetASRPreInc(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreInc(offsetASR, execLDR)
     }
 
     // LDR Rd, [Rn, Rm, ROR #]
-    def LDROffsetRORPreInc(instruction: Int): Unit = {
+    def LDROffsetRORPreInc(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreInc(offsetROR, execLDR)
     }
 
     // STR Rd, [Rn, Rm, LSL #]!
-    def STROffsetLSLPreIncWB(instruction: Int): Unit = {
+    def STROffsetLSLPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreIncWB(offsetLSL, execSTR)
     }
+
     // STR Rd, [Rn, Rm, LSR #]!
-    def STROffsetLSRPreIncWB(instruction: Int): Unit = {
+    def STROffsetLSRPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreIncWB(offsetLSR, execSTR)
     }
 
     // STR Rd, [Rn, Rm, ASR #]!
-    def STROffsetASRPreIncWB(instruction: Int): Unit = {
+    def STROffsetASRPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreIncWB(offsetASR, execSTR)
     }
 
     // STR Rd, [Rn, Rm, ROR #]!
-    def STROffsetRORPreIncWB(instruction: Int): Unit = {
+    def STROffsetRORPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       strPreIncWB(offsetROR, execSTR)
     }
 
     // LDR Rd, [Rn, Rm, LSL #]!
-    def LDROffsetLSLPreIncWB(instruction: Int): Unit = {
+    def LDROffsetLSLPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreIncWB(offsetLSL, execLDR)
     }
 
     // LDR Rd, [Rn, Rm, LSR #]!
-    def LDROffsetLSRPreIncWB(instruction: Int): Unit = {
+    def LDROffsetLSRPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreIncWB(offsetLSR, execLDR)
     }
 
     // LDR Rd, [Rn, Rm, ASR #]!
-    def LDROffsetASRPreIncWB(instruction: Int): Unit = {
+    def LDROffsetASRPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreIncWB(offsetASR, execLDR)
     }
 
     // LDR Rd, [Rn, Rm, ROR #]!
-    def LDROffsetRORPreIncWB(instruction: Int): Unit = {
+    def LDROffsetRORPreIncWB(opcode: Int): Unit = {
+      instruction = opcode
       ldrPreIncWB(offsetROR, execLDR)
     }
   }
@@ -1111,38 +1245,82 @@ class ArmMacros(em: Emulator) {
   //offset and addressing calls
   def decodeLoadStore(instruction: Int): Unit = {
     val op = (instruction >> 20) & 0x0ff
+    val I: Boolean = (op & 32) == 32
+    val P: Boolean = (op & 16) == 16 // P == 1 Pre, P == 0 Post
+    val U: Boolean = (op & 8) == 8 // U == 1 inc, U == 0 dec
+    val B: Boolean = (op & 4) == 4 // B == 1 , B == 0
+    val W: Boolean = (op & 2) == 2 // if P (W == 0) => offset addressing (base address not updated) (W == 1) => pre index addressing, if(P == 0) (W == 0) => LDR LDRB STR STRB (W == 1) => LDRT LDRBT STRBT STRT
+    val L: Boolean = (op & 1) == 1 // L == 1 Load, L == 0 Store
 
-    // Determine value of L bit
-    // 1 = load, 0 = store
-    if((op & 1) == 1) {
-      if((op & 4) == 4) { // xx1x1
-        if((op == 7) || (op == 15)) { // 0x111, LDRBT
+//    if(P) { //pre-indexing
+//      if (B) {
+//        if (L) {
+//
+//        } else {
+//
+//        }
+//      } else {
+//        if (L) {
+//
+//        }
+//        else {
+//
+//        }
+//      }
+//      if (W && base != getPC()) * base = address
+//    }
+//    else {
+//      if(W)	srcDst = getRegister((pipeline[PIPELINE_EXECUTE] >> 12) & 0xF) //user-mode forced transfer (only available in privileged mode): use user mode registers
+//
+//      if(B){
+//        if(L){
+//          *srcDst = read
+//        }
+//        else{
+//
+//        }
+//      } else {
+//        if(L){
+//
+//        }
+//        else{
+//
+//        }
+//      }
+//      if(base != getPC()) *base = address + ((U ? 1 : -1) * offset)
 
-        } else { // LDRB
 
-        }
-      } else { // xx0x1
-        if((op == 3) || (op == 1)) { // 0x011 ldrt
-
-        } else { // ldr
-          loadStore.ldr()
-        }
-      }
-    } else {
-      if((op & 4) == 4) {
-        if((op == 6) || (op == 14)) { // strbt
-
-        } else { //strb
-
-        }
-      } else {
-        if((op == 2) || (op == 10)) { //strt
-
-        } else { //str
-          loadStore.str()
-        }
-      }
-    }
+//    // Determine value of L bit
+//    // 1 = load, 0 = store
+//    if((op & 1) == 1) {
+//      if((op & 4) == 4) { // xx1x1
+//        if((op == 7) || (op == 15)) { // 0x111, LDRBT
+//
+//        } else { // LDRB
+//
+//        }
+//      } else { // xx0x1
+//        if((op == 3) || (op == 1)) { // 0x011 ldrt
+//
+//        } else { // ldr
+//          loadStore.ldr()
+//        }
+//      }
+//    } else {
+//      if((op & 4) == 4) {
+//        if((op == 6) || (op == 14)) { // strbt
+//
+//        } else { //strb
+//
+//        }
+//      } else {
+//        if((op == 2) || (op == 10)) { //strt
+//
+//        } else { //str
+//          loadStore.str()
+//        }
+//      }
+//    }
   }
 
   def decodeMultiply(instruction: Int): Unit = {
