@@ -7,28 +7,19 @@ import Globals._
 // Emulator class encapsulating emulator operations
 // Memory, Registers, etc
 
-//sealed trait Mode { def hexa: Int }
-//case object USR extends Mode { val hexa = 0x10}
-//case object FIQ extends Mode { val hexa = 0x11}
-//case object IRQ extends Mode { val hexa = 0x12}
-//case object SVC extends Mode { val hexa = 0x13}
-//case object ABT extends Mode { val hexa = 0x17}
-//case object UND extends Mode { val hexa = 0x1b}
-//case object SYS extends Mode { val hexa = 0x1f}
-object ProcessorMode extends Enumeration {
-  val USR = Value(0x10)
-  val FIQ = Value(0x11)
-  val IRQ = Value(0x12)
-  val SVC = Value(0x13)
-  val ABT = Value(0x17)
-  val UND = Value(0x1b)
-  val SYS = Value(0x1f)
-
-}
-
 
 class Emulator() {
 
+  object ProcessorMode extends Enumeration {
+    val USR: ProcessorMode.Value = Value(0x10)
+    val FIQ: ProcessorMode.Value = Value(0x11)
+    val IRQ: ProcessorMode.Value = Value(0x12)
+    val SVC: ProcessorMode.Value = Value(0x13)
+    val ABT: ProcessorMode.Value = Value(0x17)
+    val UND: ProcessorMode.Value = Value(0x1b)
+    val SYS: ProcessorMode.Value = Value(0x1f)
+
+  }
 
 //  private val DEFAULT_NUMBER_OF_GENERAL_REGISTERS = 15
 //  private val DEFAULT_PC_REGISTERS = 1
@@ -38,9 +29,9 @@ class Emulator() {
   var nextPC: Int = 0x00000000
   var armState: Boolean = true
   var irq: Boolean = true
-  var currMode = ProcessorMode.SYS
+  var currMode: ProcessorMode.Value = ProcessorMode.SYS
 
-  var registers = List.fill[Int](31)(0)
+  var registers: List[Int] = List.fill[Int](31)(0)
 
   var cpsr = Flag.FlagSet()
   var spsr = Flag.FlagSet()
@@ -57,18 +48,6 @@ class Emulator() {
 
 
 
-  def getProgramCounter() : Int = {
-    registers(15) + 4
-  }
-
-  def getRegister(index : Int) : Int = {
-    if(index == 15) {
-      getProgramCounter()
-    } else {
-      registers(index)
-    }
-  }
-
   def updateCPSR(): Unit = {
     if(N_FLAG) cpsr.|(FlagSet(Flag.N))
     if(C_FLAG) cpsr.|(FlagSet(Flag.C))
@@ -77,7 +56,7 @@ class Emulator() {
     if(!armState) cpsr.|(FlagSet(Flag.T))
     if(!irq) cpsr.|(FlagSet(Flag.I))
 
-    cpsr.|(Flag(currMode))
+//    cpsr.|(Flag(currMode))
   }
 
   def updateFlags(): Unit = {
@@ -89,10 +68,6 @@ class Emulator() {
     irq = cpsr.isSet(Flag.I)
   }
 
-  def setRegister(index: Int, value: Int): Unit = {
-    registers(index) = value
-  }
-
   def switchMode(mode: ProcessorMode.Value, save: Boolean): Unit = {
     //update flags
     updateCPSR()
@@ -101,7 +76,6 @@ class Emulator() {
       case ProcessorMode.USR =>
       case ProcessorMode.SYS => registers(9) = 0
       case ProcessorMode.FIQ =>
-        // need register swap method
         registers(R13_FIQ) = registers(13)
         registers(R14_FIQ) = registers(14)
         spsrFIQ = cpsr
@@ -168,11 +142,10 @@ class Emulator() {
   }
 
   def softwareInterrupt(): Unit = {
-    val pc = registers(15)
     val savedState = armState
     //switch mode
-    switchMode(ProcessorMode.FIQ, true)
-    registers(14) = pc - (if(savedState) 4 else 2)
+    switchMode(ProcessorMode.FIQ, save = true)
+    registers(14) = registers(15) - (if(savedState) 4 else 2)
     registers(15) = 0x08
     armState = true
     irq = false
@@ -182,11 +155,10 @@ class Emulator() {
   }
 
   def interrupt(): Unit = {
-    val pc = registers(15)
     val savedState = armState
     // switch modes
-    switchMode(ProcessorMode.IRQ, true)
-    registers(14) = pc
+    switchMode(ProcessorMode.IRQ, save = true)
+    registers(14) = registers(15)
     if(!savedState) registers(14) += 2
     registers(15) = 0x18
     armState = true

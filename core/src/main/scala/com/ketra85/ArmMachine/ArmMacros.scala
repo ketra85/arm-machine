@@ -44,11 +44,11 @@ class ArmMacros(em: Emulator) {
     }
 
     def checkPc(setConditional: (Int, Int, Int) => Unit): Unit = {
-      if(rd != 15) setConditional
+      if(rd != 15) setConditional()
     }
 
-    def checkPc(setConditional: (Int) => Unit): Unit = {
-      if(rd != 15) setConditional
+    def checkPc(setConditional: Int => Unit): Unit = {
+      if(rd != 15) setConditional()
     }
 
     def init(instruction: Int): Unit = {
@@ -102,7 +102,7 @@ class ArmMacros(em: Emulator) {
         value = v >> shift
       } else {
         value = 0
-        carry_out = (em.registers(inst & 0x0f) & 0x80000000) == 1
+        carry_out = (em.registers(inst & 0x0f) & 0x80000000) == 0x80000000
       }
     }
 
@@ -115,7 +115,7 @@ class ArmMacros(em: Emulator) {
       if(shift == 0) {
         if(shift == 32) {
           value = 0
-          carry_out = (rm & 0x80000000) == 1
+          carry_out = (rm & 0x80000000) == 0x80000000
         } else if(shift < 32) {
           val v = rm
           carry_out = ((v >> (shift - 1)) & 1) == 1
@@ -137,7 +137,7 @@ class ArmMacros(em: Emulator) {
         carry_out = ((v >> (shift - 1)) & 1) == 1
         value = v >> shift
       } else {
-        if((em.registers(inst & 0x0f) & 0x80000000) == 1) {
+        if((em.registers(inst & 0x0f) & 0x80000000) == 0x80000000) {
           value = 0xFFFFFFFF
           carry_out = true
         } else {
@@ -162,7 +162,7 @@ class ArmMacros(em: Emulator) {
           value = rm
         }
       } else {
-        if((em.registers(inst & 0x0f) & 0x80000000) == 1) {
+        if((em.registers(inst & 0x0f) & 0x80000000) == 0x80000000) {
           value = 0xFFFFFFFF
           carry_out = true
         } else {
@@ -200,7 +200,7 @@ class ArmMacros(em: Emulator) {
         value = (v << (32 -  shift)) | (v >> shift)
       } else {
         value = rm
-        if(shift == 0) carry_out = ((value & 0x80000000) == 1)
+        if(shift == 0) carry_out = (value & 0x80000000) == 0x80000000
 
       }
     }
@@ -1139,7 +1139,7 @@ class ArmMacros(em: Emulator) {
     var offset = instruction.value & 0x00ffffff
     c.Expr(
       q"""
-        if(($offset & 0x00800000) == 1) $offset |= 0xff000000
+        if(($offset & 0x00800000) == 0x00800000) $offset |= 0xff000000
 
         ${em.registers(15)} = $offset << 2
         ${em.nextPC} = ${em.registers(15)}
@@ -1155,7 +1155,7 @@ class ArmMacros(em: Emulator) {
     var offset = instruction.value & 0x00ffffff
     c.Expr(
       q"""
-        if(($offset & 0x00800000) == 1) $offset |= 0xff000000
+        if(($offset & 0x00800000) == 0x00800000) $offset |= 0xff000000
 
         ${em.registers(14)} = ${em.registers(15)} - 4
         ${em.registers(15)} = $offset << 2
@@ -1175,10 +1175,12 @@ class ArmMacros(em: Emulator) {
        """)
   }
 
-  def armExecuteMacro(instruction: Int): Int = {
+  def armExecuteMacro(): Int = {
     // Only twelve bits needed to decode
     // bits[27:20] (inclusive)
 //    val identifier = (instruction >> 20) & 0x0ff
+    val instruction: Int = em.prefetch(0)
+    em.prefetch(0) = em.prefetch(1)
     val identifier = (instruction >> 25) & 7
     val op = (instruction >> 4) & 1
     val cond = instruction >> 28

@@ -1,4 +1,5 @@
 import com.ketra85.ArmMachine._
+
 import org.scalatra._
 import javax.servlet.ServletContext
 
