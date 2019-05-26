@@ -6,6 +6,17 @@ import scala.reflect.macros.blackbox.Context
 
 class ArmMacros(em: Emulator) {
 
+  def armUnknown(): Unit = macro armUnknownMacro
+
+  def armUnknownMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         ${em.undefinedException()}
+       """)
+  }
+
   // Data processing ops except multiplication
   object ALU {
     var value: Int = 0
@@ -65,7 +76,7 @@ class ArmMacros(em: Emulator) {
         value = em.registers(inst & 0x0f)
       } else {
         val v = em.registers(inst & 0x0f)
-        carry_out = (((v >> (32 - shift)) & 1) == 1)
+        carry_out = ((v >> (32 - shift)) & 1) == 1
         value = v << shift
       }
     }
@@ -573,11 +584,188 @@ class ArmMacros(em: Emulator) {
   def mrsCPSR(): Unit = macro mrsCPSRMacro
   def mrsSPSR(): Unit = macro mrsSPSRMacro
 
+  def mrsCPSRMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         if((${instruction.value} & 0x0fff0fff) == 0x014f0000) {
+          ${em.updateCPSR()}
+          ${em.registers((instruction.value >> 12) & 0x0f)} = ${em.registers(17)}
+         } else {
+          ${armUnknown()}
+         }
+       """)
+  }
+
+  def mrsSPSRMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+         if((${instruction.value} & 0x0fff0fff) == 0x010f0000) {
+          ${em.updateCPSR()}
+          ${em.registers((instruction.value >> 12) & 0x0f)} = ${em.registers(16)}
+         } else {
+          ${armUnknown()}
+         }
+       """)
+  }
+
   def msrCPSRRegister(): Unit = macro msrCPSRRegisterMacro
   def msrSPSRRegister(): Unit = macro msrSPSRRegisterMacro
 
+  def msrCPSRRegisterMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    var value: Int = 0
+    var newValue: Int = 0
+
+    c.Expr(
+      q"""
+         if((${instruction.value} & 0x0ff0fff0) == 0x0120f000) {
+          ${em.updateCPSR()}
+          $value = ${em.registers(instruction.value & 15)}
+          $newValue = ${em.registers(16)}
+          if(${em.currMode} != ${em.ProcessorMode.USR}) {
+            if (${instruction.value} & 0x00010000) {
+              $newValue = ($newValue & 0xffffff00) | ($value & 0x000000ff)
+            }
+            if (${instruction.value} & 0x00020000) {
+              $newValue = ($newValue & 0xffff00ff) | ($value & 0x0000ff00)
+            }
+            if (${instruction.value} & 0x00040000) {
+              $newValue = ($newValue & 0xff00ffff) | ($value & 0x00ff0000)
+            }
+          }
+          if(${instruction.value} & 0x00080000) {
+            $newValue = ($newValue & 0x00ffffff) | ($value & 0xff000000)
+          }
+          $newValue |= 0x10
+          ${em.switchMode(em.ProcessorMode(newValue & 0x1f), save = false)}
+          ${em.registers(16)} = newValue
+          ${em.updateFlags()}
+          if(!${em.armState}) {
+            ${em.thumbPrefetch()}
+            ${em.registers(15)} = ${em.nextPC} + 2
+          }
+         } else {
+          ${armUnknown()}
+         }
+       """)
+  }
+
+  def msrSPSRRegisterMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    var value: Int = 0
+
+    c.Expr(
+      q"""
+         if((${instruction.value} & 0x0ff0fff0) == 0x0160f000) {
+          ${em.updateCPSR()}
+          $value = ${em.registers(instruction.value & 15)}
+          if((${em.currMode} != ${em.ProcessorMode.USR}) && (${em.currMode} != ${em.ProcessorMode.SYS})) {
+            if (${instruction.value} & 0x00010000) {
+              ${em.registers(17)} = (${em.registers(17)} & 0xffffff00) | ($value & 0x000000ff)
+            }
+            if (${instruction.value} & 0x00020000) {
+              ${em.registers(17)} = (${em.registers(17)} & 0xffff00ff) | ($value & 0x0000ff00)
+            }
+            if (${instruction.value} & 0x00040000) {
+              ${em.registers(17)} = (${em.registers(17)} & 0xff00ffff) | ($value & 0x00ff0000)
+            }
+            if (${instruction.value} & 0x00080000) {
+              ${em.registers(17)} = (${em.registers(17)} & 0x00ffffff) | ($value & 0xff000000)
+            }
+          }
+         } else {
+          ${armUnknown()}
+         }
+       """)
+  }
+
+
   def msrCPSRMultiple(): Unit = macro msrMultipleMacro
   def msrSPSRMultiple(): Unit = macro msrMultipleMacro
+
+
+  // MSR CPSR_fields, #
+  def msrCPSRMultipleMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    var value: Int = 0
+    var newValue: Int = 0
+    var shift: Int = 0
+
+    c.Expr(
+      q"""
+         if((${instruction.value} & 0x0ff0f000) == 0x0320f000) {
+          ${em.updateCPSR()}
+          $value = ${instruction.value} & 0xff
+          $shift = (${instruction.value} & 0xf00) >> 7
+          if($shift == 0xf00) {
+            ROR_IMM_MSR;
+          }
+         |      u32 newValue = reg[16].I;
+         |      if (armMode > 0x10)
+         |      {
+         |        if (opcode & 0x00010000)
+         |          newValue = (newValue & 0xFFFFFF00) | (value & 0x000000FF);
+         |        if (opcode & 0x00020000)
+         |          newValue = (newValue & 0xFFFF00FF) | (value & 0x0000FF00);
+         |        if (opcode & 0x00040000)
+         |          newValue = (newValue & 0xFF00FFFF) | (value & 0x00FF0000);
+         |      }
+         |      if (opcode & 0x00080000)
+         |        newValue = (newValue & 0x00FFFFFF) | (value & 0xFF000000);
+         |
+ |      newValue |= 0x10;
+         |
+ |      CPUSwitchMode(newValue & 0x1F, false);
+         |      reg[16].I = newValue;
+         |      CPUUpdateFlags();
+         |      if (!armState)    // this should not be allowed, but it seems to work
+         |      {
+         |        THUMB_PREFETCH();
+         |        reg[15].I = armNextPC + 2;
+         |      }
+         |    }
+         |    else
+         |    {
+         |      armUnknownInsn(opcode);
+         |    }
+       """)
+  }
+
+  // MSR SPSR_fields, #
+  static INSN_REGPARM void arm360(u32 opcode)
+  {
+    if (LIKELY((opcode & 0x0FF0F000) == 0x0360F000))
+    {
+      if (armMode > 0x10 && armMode < 0x1F)
+      {
+        u32 value = opcode & 0xFF;
+        int shift = (opcode & 0xF00) >> 7;
+        if (shift)
+        {
+          ROR_IMM_MSR;
+        }
+        if (opcode & 0x00010000)
+          reg[17].I = (reg[17].I & 0xFFFFFF00) | (value & 0x000000FF);
+        if (opcode & 0x00020000)
+          reg[17].I = (reg[17].I & 0xFFFF00FF) | (value & 0x0000FF00);
+        if (opcode & 0x00040000)
+          reg[17].I = (reg[17].I & 0xFF00FFFF) | (value & 0x00FF0000);
+        if (opcode & 0x00080000)
+          reg[17].I = (reg[17].I & 0x00FFFFFF) | (value & 0xFF000000);
+      }
+    }
+    else
+    {
+      armUnknownInsn(opcode);
+    }
+  }
 
   def bx(instruction: Int): Unit = macro bxMacro
 
@@ -603,13 +791,6 @@ class ArmMacros(em: Emulator) {
   }
 
   // STM and LDM
-
-  // Branching
-  def b(instruction: Int): Unit = macro bMacro
-  def bl(instruction: Int): Unit = macro blMacro
-
-  def mrc(): Unit = macro mrcMacro
-  def swi(): Unit = macro swiMacro
 
   // Load and Store ops
   object loadStore {
@@ -1132,6 +1313,13 @@ class ArmMacros(em: Emulator) {
     }
   }
 
+  // Branching
+  def b(instruction: Int): Unit = macro bMacro
+  def bl(instruction: Int): Unit = macro blMacro
+
+  def mrc(): Unit = macro mrcMacro
+  def swi(): Unit = macro swiMacro
+
   // Branch
   def bMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
     import c.universe._
@@ -1163,6 +1351,17 @@ class ArmMacros(em: Emulator) {
         ${em.registers(15)} += 4
         ${em.armPrefetch()}
       """)
+  }
+
+  //mrc
+  // unsupported
+  def mrcMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    c.Expr(
+      q"""
+
+       """)
   }
 
   // SWI

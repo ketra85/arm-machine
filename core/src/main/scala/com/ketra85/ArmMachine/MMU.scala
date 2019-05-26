@@ -2,7 +2,8 @@ package com.ketra85.ArmMachine
 
 case class MMU(emulator: Emulator) {
 
-  var memory = List.fill[Byte](65536)(0)
+  val size: Int = scala.math.pow(2, 26).toInt
+  var memory: List[Byte] = List.fill[Byte](size)(0)
 
   def write8(address: Int, data: Byte): Unit = {
     memory(address) = data.toInt
