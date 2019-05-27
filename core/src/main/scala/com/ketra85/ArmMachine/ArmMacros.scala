@@ -1529,6 +1529,511 @@ class ArmMacros(em: Emulator) {
       instruction = opcode
       ldrPreIncWB(offsetImm8, execLDRH)
     }
+
+    // LDRSB Rd, [Rn], -Rm
+    def LDRSBOffsetRegPostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetReg, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn], #-offset
+    def LDRSBOffsetImm8PostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetImm8, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn], Rm
+    def LDRSBOffsetRegPostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetReg, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn], #offset
+    def LDRSBOffsetImm8PostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetImm8, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn, -Rm]
+    def LDRSBOffsetRegPreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetReg, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn, -Rm]!
+    def LDRSBOffsetRegPreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetReg, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn, -#offset]
+    def LDRSBOffsetImm8PreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetImm8, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn, -#offset]!
+    def LDRSBOffsetImm8PreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetImm8, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn, Rm]
+    def LDRSBOffsetRegPreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetReg, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn, Rm]!
+    def LDRSBOffsetRegPreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetReg, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn, #offset]
+    def LDRSBOffsetImm8PreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetImm8, execLDRSB)
+    }
+
+    // LDRSB Rd, [Rn, #offset]!
+    def LDRSBOffsetImm8PreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetImm8, execLDRSB)
+    }
+
+    // LDRSH Rd, [Rn], -Rm
+    def LDRSHOffsetRegPostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetReg, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn], #-offset
+    def LDRSHOffsetImm8PostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetImm8, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn], Rm
+    def LDRSHOffsetRegPostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetReg, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn], #offset
+    def LDRSHOffsetImm8PostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetImm8, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn, -Rm]
+    def LDRSHOffsetRegPreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetReg, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn, -Rm]!
+    def LDRSHOffsetRegPreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetReg, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn, -#offset]
+    def LDRSHOffsetImm8PreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetImm8, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn, -#offset]!
+    def LDRSHOffsetImm8PreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetImm8, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn, Rm]
+    def LDRSHOffsetRegPreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetReg, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn, Rm]!
+    def LDRSHOffsetRegPreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetReg, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn, #offset]
+    def LDRSHOffsetImm8PreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetImm8, execLDRSH)
+    }
+
+    // LDRSH Rd, [Rn, #offset]!
+    def LDRSHOffsetImm8PreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetImm8, execLDRSH)
+    }
+
+    // LDRB[T] Rd, [Rn], -#
+    def LDRBOffsetImmPostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetImm, execLDRB)
+    }
+
+    // LDRB[T] Rd, [Rn], #
+    def LDRBOffsetImmPostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetImm, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -#]
+    def LDRBOffsetImmPreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetImm, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -#]!
+    def LDRBOffsetImmPreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetImm, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, #]
+    def LDRBOffsetImmPreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetImm, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, #]!
+    def LDRBOffsetImmPreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetImm, execLDRB)
+    }
+
+    // LDRB[T] Rd, [Rn], -Rm, LSL #
+    def LDRBOffsetLSLPostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetLSL, execLDRB)
+    }
+
+    // LDRB[T] Rd, [Rn], -Rm, LSR #
+    def LDRBOffsetLSRPostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetLSR, execLDRB)
+    }
+
+    // LDRB[T] Rd, [Rn], -Rm, ASR #
+    def LDRBOffsetASRPostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetASR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn], -Rm, ROR #
+    def LDRBOffsetRORPostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetROR, execLDRB)
+    }
+
+    // LDRB[T] Rd, [Rn], Rm, LSL #
+    def LDRBOffsetLSLPostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetLSL, execLDRB)
+    }
+
+    // LDRB[T] Rd, [Rn], Rm, LSR #
+    def LDRBOffsetLSRPostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetLSR, execLDRB)
+    }
+
+    // LDRB[T] Rd, [Rn], Rm, ASR #
+    def LDRBOffsetASRPostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetASR, execLDRB)
+    }
+
+    // LDRB[T] Rd, [Rn], Rm, ROR #
+    def LDRBOffsetRORPostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetROR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -Rm, LSL #]
+    def LDRBOffsetLSLPreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetLSL, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -Rm, LSR #]
+    def LDRBOffsetLSRPreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetLSR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -Rm, ASR #]
+    def LDRBOffsetASRPreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetASR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -Rm, ROR #]
+    def LDRBOffsetRORPreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetROR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -Rm, LSL #]!
+    def LDRBOffsetLSLPreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetLSL, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -Rm, LSR #]!
+    def LDRBOffsetLSRPreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetLSR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -Rm, ASR #]!
+    def LDRBOffsetASRPreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetASR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, -Rm, ROR #]!
+    def LDRBOffsetRORPreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetROR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, Rm, LSL #]
+    def LDRBOffsetLSLPreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetLSL, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, Rm, LSR #]
+    def LDRBOffsetLSRPreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetLSR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, Rm, ASR #]
+    def LDRBOffsetASRPreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetASR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, Rm, ROR #]
+    def LDRBOffsetRORPreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetROR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, Rm, LSL #]!
+    def LDRBOffsetLSLPreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetLSL, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, Rm, LSR #]!
+    def LDRBOffsetLSRPreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetLSR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, Rm, ASR #]!
+    def LDRBOffsetASRPreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetASR, execLDRB)
+    }
+
+    // LDRB Rd, [Rn, Rm, ROR #]!
+    def LDRBOffsetRORPreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetROR, execLDRB)
+    }
+
+    // STRB[T] Rd, [Rn], -#
+    def STRBOffsetImmPostDec(opcode: Int) {
+      instruction = opcode
+      strPostDec(offsetImm, execSTRB)
+    }
+
+    // STRB[T] Rd, [Rn], #
+    def STRBOffsetImmPostInc(opcode: Int) {
+      instruction = opcode
+      strPostInc(offsetImm, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -#]
+    def STRBOffsetImmPreDec(opcode: Int) {
+      instruction = opcode
+      strPreDec(offsetImm, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -#]!
+    def STRBOffsetImmPreDecWB(opcode: Int) {
+      instruction = opcode
+      strPreDecWB(offsetImm, execSTRB)
+    }
+
+    // STRB Rd, [Rn, #]
+    def STRBOffsetImmPreInc(opcode: Int) {
+      instruction = opcode
+      strPreInc(offsetImm, execSTRB)
+    }
+
+    // STRB Rd, [Rn, #]!
+    def STRBOffsetImmPreIncWB(opcode: Int) {
+      instruction = opcode
+      strPreIncWB(offsetImm, execSTRB)
+    }
+
+    // STRB[T] Rd, [Rn], -Rm, LSL #
+    def STRBOffsetLSLPostDec(opcode: Int) {
+      instruction = opcode
+      strPostDec(offsetLSL, execSTRB)
+    }
+
+    // STRB[T] Rd, [Rn], -Rm, LSR #
+    def STRBOffsetLSRPostDec(opcode: Int) {
+      instruction = opcode
+      strPostDec(offsetLSR, execSTRB)
+    }
+
+    // STRB[T] Rd, [Rn], -Rm, ASR #
+    def STRBOffsetASRPostDec(opcode: Int) {
+      instruction = opcode
+      strPostDec(offsetASR, execSTRB)
+    }
+
+    // STRB[T] Rd, [Rn], -Rm, ROR #
+    def STRBOffsetRORPostDec(opcode: Int) {
+      instruction = opcode
+      strPostDec(offsetROR, execSTRB)
+    }
+
+    // STRB[T] Rd, [Rn], Rm, LSL #
+    def STRBOffsetLSLPostInc(opcode: Int) {
+      instruction = opcode
+      strPostInc(offsetLSL, execSTRB)
+    }
+
+    // STRB[T] Rd, [Rn], Rm, LSR #
+    def STRBOffsetLSRPostInc(opcode: Int) {
+      instruction = opcode
+      strPostInc(offsetLSR, execSTRB)
+    }
+
+    // STRB[T] Rd, [Rn], Rm, ASR #
+    def STRBOffsetASRPostInc(opcode: Int) {
+      instruction = opcode
+      strPostInc(offsetASR, execSTRB)
+    }
+
+    // STRB[T] Rd, [Rn], Rm, ROR #
+    def STRBOffsetRORPostInc(opcode: Int) {
+      instruction = opcode
+      strPostInc(offsetROR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -Rm, LSL #]
+    def STRBOffsetLSLPreDec(opcode: Int) {
+      instruction = opcode
+      strPreDec(offsetLSL, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -Rm, LSR #]
+    def STRBOffsetLSRPreDec(opcode: Int) {
+      instruction = opcode
+      strPreDec(offsetLSR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -Rm, ASR #]
+    def STRBOffsetASRPreDec(opcode: Int) {
+      instruction = opcode
+      strPreDec(offsetASR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -Rm, ROR #]
+    def STRBOffsetRORPreDec(opcode: Int) {
+      instruction = opcode
+      strPreDec(offsetROR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -Rm, LSL #]!
+    def STRBOffsetLSLPreDecWB(opcode: Int) {
+      instruction = opcode
+      strPreDecWB(offsetLSL, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -Rm, LSR #]!
+    def STRBOffsetLSRPreDecWB(opcode: Int) {
+      instruction = opcode
+      strPreDecWB(offsetLSR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -Rm, ASR #]!
+    def STRBOffsetASRPreDecWB(opcode: Int) {
+      instruction = opcode
+      strPreDecWB(offsetASR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, -Rm, ROR #]!
+    def STRBOffsetRORPreDecWB(opcode: Int) {
+      instruction = opcode
+      strPreDecWB(offsetROR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, Rm, LSL #]
+    def STRBOffsetLSLPreInc(opcode: Int) {
+      instruction = opcode
+      strPreInc(offsetLSL, execSTRB)
+    }
+
+    // STRB Rd, [Rn, Rm, LSR #]
+    def STRBOffsetLSRPreInc(opcode: Int) {
+      instruction = opcode
+      strPreInc(offsetLSR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, Rm, ASR #]
+    def STRBOffsetASRPreInc(opcode: Int) {
+      instruction = opcode
+      strPreInc(offsetASR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, Rm, ROR #]
+    def STRBOffsetRORPreInc(opcode: Int) {
+      instruction = opcode
+      strPreInc(offsetROR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, Rm, LSL #]!
+    def STRBOffsetLSLPreIncWB(opcode: Int) {
+      instruction = opcode
+      strPreIncWB(offsetLSL, execSTRB)
+    }
+
+    // STRB Rd, [Rn, Rm, LSR #]!
+    def STRBOffsetLSRPreIncWB(opcode: Int) {
+      instruction = opcode
+      strPreIncWB(offsetLSR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, Rm, ASR #]!
+    def STRBOffsetASRPreIncWB(opcode: Int) {
+      instruction = opcode
+      strPreIncWB(offsetASR, execSTRB)
+    }
+
+    // STRB Rd, [Rn, Rm, ROR #]!
+    def STRBOffsetRORPreIncWB(opcode: Int) {
+      instruction = opcode
+      strPreIncWB(offsetROR, execSTRB)
+    }
+
   }
 
   // Branching
