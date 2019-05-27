@@ -228,10 +228,6 @@ class ArmMacros(em: Emulator) {
       }
     }
 
-//    def ROR_IMM_MSR(): Unit = {
-//      val v = inst & 0xff
-//      value = ((v << (32 -shift)) | (offset >> shift))
-//    }
 
     def and(): Unit = macro andMacro
     def eor(): Unit = macro eorMacro
@@ -245,6 +241,7 @@ class ArmMacros(em: Emulator) {
     def teq(): Unit = macro teqMacro
     def cmp(): Unit = macro cmpMacro
     def cmn(): Unit = macro cmnMacro
+    def orr(): Unit = macro orrMacro
     def mov(): Unit = macro movMacro
     def bic(): Unit = macro bicMacro
     def mvn(): Unit = macro mvnMacro
@@ -345,52 +342,47 @@ class ArmMacros(em: Emulator) {
 
     }
 
-    // incomplete need function to set flags
     def tstMacro(c: Context): c.Expr[Unit] = {
       import c.universe._
 
       val result = em.registers((inst >> 16) & 0x0f) & value
       c.Expr(
         q"""
-
+          ${setConditionalLogical(result)}
         """)
     }
 
-    // incomplete
     def teqMacro(c: Context): c.Expr[Unit] = {
       import c.universe._
 
       val result = em.registers((inst >> 16) & 0x0f) ^ value
       c.Expr(
         q"""
-
+          ${setConditionalLogical(result)}
         """)
     }
 
-    // incomplete
     def cmpMacro(c: Context): c.Expr[Unit] = {
       import c.universe._
 
-      val rn = em.registers((inst >> 16) & 0xf)
+      val rn = em.registers((inst >> 16) & 15)
       val imm = value
       val result = rn - imm
       c.Expr(
         q"""
-
-       """)
-
+           ${setConditionalSub(rn, imm, result)}
+         """)
     }
 
-    // incomplete
     def cmnMacro(c: Context): c.Expr[Unit] = {
       import c.universe._
 
-      val rn = em.registers((inst >> 16) & 0xf)
+      val rn = em.registers((inst >> 16) & 15)
       val imm = value
       val result = rn + imm
       c.Expr(
         q"""
-
+          ${setConditionalAdd(rn, imm, result)}
         """)
     }
 
@@ -686,8 +678,8 @@ class ArmMacros(em: Emulator) {
   }
 
 
-  def msrCPSRMultiple(): Unit = macro msrMultipleMacro
-  def msrSPSRMultiple(): Unit = macro msrMultipleMacro
+  def msrCPSRMultiple(): Unit = macro msrCPSRMultipleMacro
+  def msrSPSRMultiple(): Unit = macro msrSPSRMultipleMacro
 
 
   // MSR CPSR_fields, #
@@ -695,6 +687,7 @@ class ArmMacros(em: Emulator) {
     import c.universe._
 
     var value: Int = 0
+    var v: Int = 0
     var newValue: Int = 0
     var shift: Int = 0
 
@@ -705,66 +698,73 @@ class ArmMacros(em: Emulator) {
           $value = ${instruction.value} & 0xff
           $shift = (${instruction.value} & 0xf00) >> 7
           if($shift == 0xf00) {
-            ROR_IMM_MSR;
+            $v = ${instruction.value} & 0xff
+            $value = ($v << (32 - $shift)) | ($v >> $shift)
           }
-         |      u32 newValue = reg[16].I;
-         |      if (armMode > 0x10)
-         |      {
-         |        if (opcode & 0x00010000)
-         |          newValue = (newValue & 0xFFFFFF00) | (value & 0x000000FF);
-         |        if (opcode & 0x00020000)
-         |          newValue = (newValue & 0xFFFF00FF) | (value & 0x0000FF00);
-         |        if (opcode & 0x00040000)
-         |          newValue = (newValue & 0xFF00FFFF) | (value & 0x00FF0000);
-         |      }
-         |      if (opcode & 0x00080000)
-         |        newValue = (newValue & 0x00FFFFFF) | (value & 0xFF000000);
-         |
- |      newValue |= 0x10;
-         |
- |      CPUSwitchMode(newValue & 0x1F, false);
-         |      reg[16].I = newValue;
-         |      CPUUpdateFlags();
-         |      if (!armState)    // this should not be allowed, but it seems to work
-         |      {
-         |        THUMB_PREFETCH();
-         |        reg[15].I = armNextPC + 2;
-         |      }
-         |    }
-         |    else
-         |    {
-         |      armUnknownInsn(opcode);
-         |    }
+          $newValue = ${em.registers(16)}
+          if(${em.currMode} != ${em.ProcessorMode.USR}) {
+            if(${instruction.value} & 0x00010000) {
+              $newValue = ($newValue & 0xffffff00) | ($value & 0x000000ff)
+            }
+            if(${instruction.value} & 0x00020000) {
+              $newValue = ($newValue & 0xffff00ff) | ($value & 0x0000ff00)
+            }
+            if(${instruction.value} & 0x00040000) {
+              $newValue = ($newValue & 0xff00ffff) | ($value & 0x00ff0000)
+            }
+          }
+          if(${instruction.value} & 0x00080000) {
+            $newValue = ($newValue & 0x00ffffff) | ($value & 0xff000000)
+          }
+          $newValue |= 0x10
+          ${em.switchMode(em.ProcessorMode(newValue & 0x1f), save = false)}
+          ${em.registers(16)} = $newValue
+          ${em.updateFlags()}
+          if(!${em.armState}) {
+            ${em.thumbPrefetch()}
+            ${em.registers(15)} = ${em.nextPC} + 2
+          }
+        } else {
+          ${armUnknown()}
+        }
        """)
   }
 
   // MSR SPSR_fields, #
-  static INSN_REGPARM void arm360(u32 opcode)
-  {
-    if (LIKELY((opcode & 0x0FF0F000) == 0x0360F000))
-    {
-      if (armMode > 0x10 && armMode < 0x1F)
-      {
-        u32 value = opcode & 0xFF;
-        int shift = (opcode & 0xF00) >> 7;
-        if (shift)
-        {
-          ROR_IMM_MSR;
+  def msrSPSRMultipleMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    var value: Int = 0
+    var v: Int = 0
+    var shift: Int = 0
+
+    c.Expr(
+      q"""
+        if((${instruction.value} & 0x0ff0f000) == 0x0360f000) {
+          if((${em.currMode} != ${em.ProcessorMode.USR}) && (${em.currMode} != ${em.ProcessorMode.SYS})) {
+            $value = ${instruction.value} & 0xff
+            $shift = (${instruction.value} & 0xf00) >> 7
+            if($shift == 0xf00) {
+              $v = ${instruction.value} & 0xff
+              $value = ($v << (32 - $shift)) | ($v >> $shift)
+            }
+            if(${instruction.value} & 0x00010000) {
+              ${em.registers(17)} = (${em.registers(17)} & 0xffffff00) | ($value & 0x000000ff)
+            }
+            if(${instruction.value} & 0x00020000) {
+              ${em.registers(17)} = (${em.registers(17)} & 0xffff00ff) | ($value & 0x0000ff00)
+            }
+            if(${instruction.value} & 0x00040000) {
+              ${em.registers(17)} = (${em.registers(17)} & 0xff00ffff) | ($value & 0x00ff0000)
+            }
+            if(${instruction.value} & 0x00080000) {
+              ${em.registers(17)} = (${em.registers(17)} & 0x00ffffff) | ($value & 0xff000000)
+            }
+          }
+        } else {
+          ${armUnknown()}
         }
-        if (opcode & 0x00010000)
-          reg[17].I = (reg[17].I & 0xFFFFFF00) | (value & 0x000000FF);
-        if (opcode & 0x00020000)
-          reg[17].I = (reg[17].I & 0xFFFF00FF) | (value & 0x0000FF00);
-        if (opcode & 0x00040000)
-          reg[17].I = (reg[17].I & 0xFF00FFFF) | (value & 0x00FF0000);
-        if (opcode & 0x00080000)
-          reg[17].I = (reg[17].I & 0x00FFFFFF) | (value & 0xFF000000);
-      }
-    }
-    else
-    {
-      armUnknownInsn(opcode);
-    }
+       """)
   }
 
   def bx(instruction: Int): Unit = macro bxMacro
@@ -791,8 +791,82 @@ class ArmMacros(em: Emulator) {
   }
 
   // STM and LDM
+  def blockDataTransfer(instruction: Int): Unit = macro blockDataTransferMacro
+
+  def blockDataTransferMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    val rn: Int = (instruction.value >> 16) & 15
+    val P: Boolean = ((instruction.value >> 24) & 1) == 1
+    val U: Boolean = ((instruction.value >> 23) & 1) == 1
+    val S: Boolean = ((instruction.value >> 22) & 1) == 1
+    val W: Boolean = ((instruction.value >> 21) & 1) == 1
+    val list: Int = (instruction.value & 0xffff)
+
+    var regs: Byte = 0
+
+    c.Expr(
+      q"""
+
+       """)
+  }
 
   // Load and Store ops
+  def loadStore(instruction: Int): Unit = macro loadStoreMacro
+
+  def loadStoreMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    val I: Boolean = ((instruction.value >> 25) & 1) == 1
+    val P: Boolean = ((instruction.value >> 24) & 1) == 1
+    val U: Boolean = ((instruction.value >> 23) & 1) == 1
+    val B: Boolean = ((instruction.value >> 22) & 1) == 1
+    val W: Boolean = ((instruction.value >> 21) & 1) == 1
+    val L: Boolean = ((instruction.value >> 20) & 1) == 1
+
+    var base: Int = (instruction.value >> 16) & 15
+    val dest: Int = (instruction.value >> 12) & 15
+    var offset: Int = 0
+    var address: Int = base
+
+    c.Expr(
+      q"""
+        if($P) {
+          $address += (if($U) 1 else -1) * $offset
+          if($B) {
+            if($L) {
+              $dest = ${em.memory.read8(address)}
+            } else {
+              ${em.memory.write8(address, (dest & 0xff).toByte)}
+            }
+          } else {
+            if($L) {
+              ${em.memory.read32(address)}
+            } else {
+              ${em.memory.write32(address, dest)}
+            }
+          }
+          if($W && $base != 15) $base = $address
+        } else {
+          if($W) $dest = ${em.registers(dest)}
+          if($B) {
+            if($L) {
+              $dest = ${em.memory.read8(address)}
+            } else {
+              ${em.memory.write8(address, (dest & 0xff).toByte)}
+            }
+          } else {
+            if($L) {
+              ${em.memory.read32(address)}
+            } else {
+              ${em.memory.write32(address, dest)}
+            }
+            if($W != 15) $base = $address + ((if($U) 1 else -1) * $offset)
+          }
+        }
+       """)
+  }
+
   object loadStore {
     var instruction: Int = 0
     var dest: Int = 0
@@ -802,7 +876,7 @@ class ArmMacros(em: Emulator) {
 
     def loadStoreInit(calculateOffset: () => Unit, calculateAddress: () => Int): Unit = {
       dest = (instruction >> 12) & 15
-      base = (instruction >> 15) & 15
+      base = (instruction >> 16) & 15
       // calc offset and address
       calculateOffset()
       address = calculateAddress()
@@ -1311,6 +1385,150 @@ class ArmMacros(em: Emulator) {
       instruction = opcode
       ldrPreIncWB(offsetROR, execLDR)
     }
+
+    // STRH Rd, [Rn], -Rm
+    def STRHOffsetRegPostDec(opcode: Int) {
+      instruction = opcode
+      strPostDec(offsetReg, execSTRH)
+    }
+
+    // STRH Rd, [Rn], #-offset
+    def STRHOffsetImm8PostDec(opcode: Int) {
+      instruction = opcode
+      strPostDec(offsetImm8, execSTRH)
+    }
+
+    // STRH Rd, [Rn], Rm
+    def STRHOffsetRegPostInc(opcode: Int) {
+      instruction = opcode
+      strPostInc(offsetReg, execSTRH)
+    }
+
+    // STRH Rd, [Rn], #offset
+    def STRHOffsetImm8PostInc(opcode: Int) {
+      instruction = opcode
+      strPostInc(offsetImm8, execSTRH)
+    }
+
+    // STRH Rd, [Rn, -Rm]
+    def STRHOffsetRegPreDec(opcode: Int) {
+      instruction = opcode
+      strPreDec(offsetReg, execSTRH)
+    }
+
+    // STRH Rd, [Rn, -Rm]!
+    def STRHOffsetRegPreDecWB(opcode: Int) {
+      instruction = opcode
+      strPreDecWB(offsetReg, execSTRH)
+    }
+
+    // STRH Rd, [Rn, -#offset]
+    def STRHOffsetImm8PreDec(opcode: Int) {
+      instruction = opcode
+      strPreDec(offsetImm8, execSTRH)
+    }
+
+    // STRH Rd, [Rn, -#offset]!
+    def STRHOffsetImm8PreDecWB(opcode: Int) {
+      instruction = opcode
+      strPreDecWB(offsetImm8, execSTRH)
+    }
+
+    // STRH Rd, [Rn, Rm]
+    def STRHOffsetRegPreInc(opcode: Int) {
+      instruction = opcode
+      strPreInc(offsetReg, execSTRH)
+    }
+
+    // STRH Rd, [Rn, Rm]!
+    def STRHOffsetRegPreIncWB(opcode: Int) {
+      instruction = opcode
+      strPreIncWB(offsetReg, execSTRH)
+    }
+
+    // STRH Rd, [Rn, #offset]
+    def STRHOffsetImm8PreInc(opcode: Int) {
+      instruction = opcode
+      strPreInc(offsetImm8, execSTRH)
+    }
+
+    // STRH Rd, [Rn, #offset]!
+    def STRHOffsetImm8PreIncWB(opcode: Int) {
+      instruction = opcode
+      strPreIncWB(offsetImm8, execSTRH)
+    }
+
+    // LDRH Rd, [Rn], -Rm
+    def LDRHOffsetRegPostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetReg, execLDRH)
+    }
+
+    // LDRH Rd, [Rn], #-offset
+    def LDRHOffsetImm8PostDec(opcode: Int) {
+      instruction = opcode
+      ldrPostDec(offsetImm8, execLDRH)
+    }
+
+    // lDRH Rd, [Rn], Rm
+    def LDRHOffsetRegPostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetReg, execLDRH)
+    }
+
+    // LDRH Rd, [Rn], #offset
+    def LDRHOffsetImm8PostInc(opcode: Int) {
+      instruction = opcode
+      ldrPostInc(offsetImm8, execLDRH)
+    }
+
+    // LDRH Rd, [Rn, -Rm]
+    def LDRHOffsetRegPreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetReg, execLDRH)
+    }
+
+    // LDRH Rd, [Rn, -Rm]!
+    def LDRHOffsetRegPreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetReg, execLDRH)
+    }
+
+    // LDRH Rd, [Rn, -#offset]
+    def LDRHOffsetImm8PreDec(opcode: Int) {
+      instruction = opcode
+      ldrPreDec(offsetImm8, execLDRH)
+    }
+
+    // LDRH Rd, [Rn, -#offset]!
+    def LDRHOffsetImm8PreDecWB(opcode: Int) {
+      instruction = opcode
+      ldrPreDecWB(offsetImm8, execLDRH)
+    }
+
+    // LDRH Rd, [Rn, Rm]
+    def LDRHOffsetRegPreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetReg, execLDRH)
+    }
+
+    // LDRH Rd, [Rn, Rm]!
+    def LDRHOffsetRegPreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetReg, execLDRH)
+    }
+
+    // LDRH Rd, [Rn, #offset]
+    def LDRHOffsetImm8PreInc(opcode: Int) {
+      instruction = opcode
+      ldrPreInc(offsetImm8, execLDRH)
+    }
+
+    // LDRH Rd, [Rn, #offset]!
+    def LDRHOffsetImm8PreIncWB(opcode: Int) {
+      instruction = opcode
+      ldrPreIncWB(offsetImm8, execLDRH)
+    }
   }
 
   // Branching
@@ -1411,11 +1629,11 @@ class ArmMacros(em: Emulator) {
         // Data Processing ops
         case 0 => decodeDataProcessing(instruction)
         // Load and Store ops
-        case 1 => if(op == 1) decodeMedia(instruction) else decodeLoadStore(instruction)
+        case 1 => loadStore(instruction)
         //branch ops
         case 2 => decodeBranch(instruction)
         case 3 => decodeCoProcessing(instruction)
-        case _ => null
+        case _ => armUnknown()
       }
     }
 
@@ -1433,13 +1651,26 @@ class ArmMacros(em: Emulator) {
   // call shift operands
   def decodeDataProcessing(instruction: Int): Unit = {
     val op = (instruction >> 21) & 15
-    val stateChange = op & 1
+    val stateChange: Boolean = (op & 1) == 1
     ALU.init(instruction)
 
     op match {
       case 0 => ALU.and()
+      case 1 => ALU.eor()
       case 2 => ALU.sub()
+      case 3 => ALU.rsb()
       case 4 => ALU.add()
+      case 5 => ALU.adc()
+      case 6 => ALU.sbc()
+      case 7 => ALU.rsc()
+      case 8 => ALU.tst()
+      case 9 => ALU.teq()
+      case 10 => ALU.cmp()
+      case 11 => ALU.cmn()
+      case 12 => ALU.orr()
+      case 13 => ALU.mov()
+      case 14 => ALU.bic()
+      case 15 => ALU.mvn()
     }
   }
 
@@ -1452,80 +1683,91 @@ class ArmMacros(em: Emulator) {
     val B: Boolean = (op & 4) == 4 // B == 1 , B == 0
     val W: Boolean = (op & 2) == 2 // if P (W == 0) => offset addressing (base address not updated) (W == 1) => pre index addressing, if(P == 0) (W == 0) => LDR LDRB STR STRB (W == 1) => LDRT LDRBT STRBT STRT
     val L: Boolean = (op & 1) == 1 // L == 1 Load, L == 0 Store
-
-//    if(P) { //pre-indexing
-//      if (B) {
-//        if (L) {
-//
-//        } else {
-//
-//        }
-//      } else {
-//        if (L) {
-//
-//        }
-//        else {
-//
-//        }
-//      }
-//      if (W && base != getPC()) * base = address
-//    }
-//    else {
-//      if(W)	srcDst = getRegister((pipeline[PIPELINE_EXECUTE] >> 12) & 0xF) //user-mode forced transfer (only available in privileged mode): use user mode registers
-//
-//      if(B){
-//        if(L){
-//          *srcDst = read
-//        }
-//        else{
-//
-//        }
-//      } else {
-//        if(L){
-//
-//        }
-//        else{
-//
-//        }
-//      }
-//      if(base != getPC()) *base = address + ((U ? 1 : -1) * offset)
-
-
-//    // Determine value of L bit
-//    // 1 = load, 0 = store
-//    if((op & 1) == 1) {
-//      if((op & 4) == 4) { // xx1x1
-//        if((op == 7) || (op == 15)) { // 0x111, LDRBT
-//
-//        } else { // LDRB
-//
-//        }
-//      } else { // xx0x1
-//        if((op == 3) || (op == 1)) { // 0x011 ldrt
-//
-//        } else { // ldr
-//          loadStore.ldr()
-//        }
-//      }
-//    } else {
-//      if((op & 4) == 4) {
-//        if((op == 6) || (op == 14)) { // strbt
-//
-//        } else { //strb
-//
-//        }
-//      } else {
-//        if((op == 2) || (op == 10)) { //strt
-//
-//        } else { //str
-//          loadStore.str()
-//        }
-//      }
-//    }
+    if(I) {
+      op & 0x1f match {
+        case 0 =>
+        case 1 =>
+        case 2 =>
+        case 3 =>
+        case 4 =>
+        case 5 =>
+        case 6 =>
+        case 7 =>
+        case 8 =>
+        case 9 =>
+        case 10 =>
+        case 11 =>
+        case 12 =>
+        case 13 =>
+        case 14 =>
+        case 15 =>
+        case 16 =>
+        case 17 =>
+        case 18 =>
+        case 19 =>
+        case 20 =>
+        case 21 =>
+        case 22 =>
+        case 23 =>
+        case 24 =>
+        case 25 =>
+        case 26 =>
+        case 27 =>
+        case 28 =>
+        case 29 =>
+        case 30 =>
+        case 31 =>
+      }
+    } else {
+      op & 0x1f match {
+        case 0 =>
+        case 1 =>
+        case 2 =>
+        case 3 =>
+        case 4 =>
+        case 5 =>
+        case 6 =>
+        case 7 =>
+        case 8 =>
+        case 9 =>
+        case 10 =>
+        case 11 =>
+        case 12 =>
+        case 13 =>
+        case 14 =>
+        case 15 =>
+        case 16 =>
+        case 17 =>
+        case 18 =>
+        case 19 =>
+        case 20 =>
+        case 21 =>
+        case 22 =>
+        case 23 =>
+        case 24 =>
+        case 25 =>
+        case 26 =>
+        case 27 =>
+        case 28 =>
+        case 29 =>
+        case 30 =>
+        case 31 =>
+      }
+    }
   }
 
   def decodeMultiply(instruction: Int): Unit = {
+    var op: Int = (instruction >> 20) & 0xf
 
+    op >> 1 match {
+      case 1 => Multiplication.mul()
+      case 2 => Multiplication.mla()
+      case 4 => Multiplication.umull()
+      case 5 => Multiplication.umlal()
+      case 6 => Multiplication.smull()
+      case 7 => Multiplication.smlal()
+      case _ => armUnknown()
+    }
   }
 
   def decodeBranch(instruction: Int): Unit = {

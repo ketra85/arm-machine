@@ -17,6 +17,38 @@ class ThumbMacros(em: Emulator) {
   def popListPC(instruction: Int): Unit = macro popListPCMacro
 
 
+  def cmpRdRs(dest: Int, value: Int): Unit = macro cmpRdRsMacro
+  def and(instruction: Int): Unit = macro andMacro
+
+  // ALU operations
+  def cmpRdRsMacro(c: Context)(dest: c.Expr[Int], value: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    val lhs = em.registers(dest.value)
+    val rhs = value.value
+    val res = lhs - rhs
+
+    c.Expr(
+      q"""
+        ${em.Z_FLAG} = if($res == 0) true else false
+        ${em.N_FLAG} =
+        ${em.V_FLAG} =
+        ${em.C_FLAG} =
+       """)
+  }
+
+  def andMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
+    import c.universe._
+
+    val dest: Int = instruction.value & 7
+
+    c.Expr(
+      q"""
+         ${em.registers(dest)} &= ${em.registers((instruction.value >> 3) & 7)}
+         ${em.N_FLAG} = if((${em.registers(dest)} & 0x80000000) == 0x80000000) true else false
+         ${em.Z_FLAG} = if(${em.registers(dest) == 0}) true else false
+       """)
+  }
 
   // Conditional Branching
   def beq(instruction: Int): Unit = macro beqMacro
