@@ -1,2 +1,0 @@
-<%@ val memory: Int%>
-<p>Memory is <%= memory %></p>

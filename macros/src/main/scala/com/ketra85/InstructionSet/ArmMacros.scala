@@ -1,20 +1,21 @@
-package com.ketra85.ArmMachine
-import scala.reflect.macros.blackbox
+package com.ketra85.InstructionSet
+
+import com.ketra85.ArmMachine._
+import scala.language.experimental.macros
 import scala.reflect.macros.blackbox.Context
 
 // There is a massive need for re-organisation
 
 class ArmMacros(em: Emulator) {
 
+  private object HasCompat { val compat = ??? }; import HasCompat._
+
   def armUnknown(): Unit = macro armUnknownMacro
 
   def armUnknownMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
     import c.universe._
-
-    c.Expr(
-      q"""
-         ${em.undefinedException()}
-       """)
+    import compat._
+    c.Expr[Unit](Literal(em.undefinedException()) setType definitions.UnitTpe)
   }
 
   // Data processing ops except multiplication
@@ -248,6 +249,7 @@ class ArmMacros(em: Emulator) {
 
     def andMacro(c: Context): c.Expr[Unit] = {
       import c.universe._
+
       val result = em.registers((inst >> 16) & 0xf) & value
 
       c.Expr(
@@ -269,6 +271,7 @@ class ArmMacros(em: Emulator) {
 
     def subMacro(c: Context): c.Expr[Unit] = {
       import c.universe._
+
       val rn = em.registers((inst >> 16) & 0xf)
       val imm = value
       val result = rn - imm
@@ -812,61 +815,6 @@ class ArmMacros(em: Emulator) {
   }
 
   // Load and Store ops
-  def loadStore(instruction: Int): Unit = macro loadStoreMacro
-
-  def loadStoreMacro(c: Context)(instruction: c.Expr[Int]): c.Expr[Unit] = {
-    import c.universe._
-
-    val I: Boolean = ((instruction.value >> 25) & 1) == 1
-    val P: Boolean = ((instruction.value >> 24) & 1) == 1
-    val U: Boolean = ((instruction.value >> 23) & 1) == 1
-    val B: Boolean = ((instruction.value >> 22) & 1) == 1
-    val W: Boolean = ((instruction.value >> 21) & 1) == 1
-    val L: Boolean = ((instruction.value >> 20) & 1) == 1
-
-    var base: Int = (instruction.value >> 16) & 15
-    val dest: Int = (instruction.value >> 12) & 15
-    var offset: Int = 0
-    var address: Int = base
-
-    c.Expr(
-      q"""
-        if($P) {
-          $address += (if($U) 1 else -1) * $offset
-          if($B) {
-            if($L) {
-              $dest = ${em.memory.read8(address)}
-            } else {
-              ${em.memory.write8(address, (dest & 0xff).toByte)}
-            }
-          } else {
-            if($L) {
-              ${em.memory.read32(address)}
-            } else {
-              ${em.memory.write32(address, dest)}
-            }
-          }
-          if($W && $base != 15) $base = $address
-        } else {
-          if($W) $dest = ${em.registers(dest)}
-          if($B) {
-            if($L) {
-              $dest = ${em.memory.read8(address)}
-            } else {
-              ${em.memory.write8(address, (dest & 0xff).toByte)}
-            }
-          } else {
-            if($L) {
-              ${em.memory.read32(address)}
-            } else {
-              ${em.memory.write32(address, dest)}
-            }
-            if($W != 15) $base = $address + ((if($U) 1 else -1) * $offset)
-          }
-        }
-       """)
-  }
-
   object loadStore {
     var instruction: Int = 0
     var dest: Int = 0

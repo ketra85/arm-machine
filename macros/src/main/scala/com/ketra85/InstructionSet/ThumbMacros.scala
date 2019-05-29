@@ -1,4 +1,7 @@
-package com.ketra85.ArmMachine
+package com.ketra85.InstructionSet
+
+import com.ketra85.ArmMachine._
+import scala.language.experimental.macros
 import scala.reflect.macros.blackbox.Context
 
 class ThumbMacros(em: Emulator) {
