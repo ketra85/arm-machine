@@ -4,23 +4,21 @@ import org.scalatra._
 import org.scalatra.scalate.ScalateSupport
 
 class Servlet extends ScalatraServlet with ScalateSupport {
-  private def displayPage = Template.page()
+  private def displayPage(title: String) = Template.page(title)
   get("/") {
-    displayPage
+    displayPage("ARM Learning Tool - ALT")
   }
 
   object Template {
-    def page(): Unit = {
+    def page(title: String): Unit = {
       <html>
         <head>
-          <head>ARM Learning Tool - ALT</head>
+          <title>{ title }</title>
         </head>
         <body>
           hello there!
-          <script></script>
         </body>
       </html>
     }
   }
-
 }
